@@ -122,7 +122,7 @@ public class MemoryPool implements Closeable {
     // Round up length to the nearest power of two, or the minimum block size
     if (length < conf.minBufferSize()) {
       length = conf.minBufferSize();
-    } else {
+   } else {
       length--;
       length |= length >> 1;
       length |= length >> 2;
