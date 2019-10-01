@@ -162,7 +162,7 @@ public class UcxNode implements Closeable {
           }
           if (globalWorker.progress() == 0) {
             globalWorker.waitForEvents();
-          }
+         }
         }
       }
     };
@@ -226,6 +226,8 @@ public class UcxNode implements Closeable {
           connection.close();
         }
         rpcConnections.clear();
+        globalWorker.signal();
+        memoryPool.close();
         globalWorker.close();
         workerPool.forEach(UcxWorkerWrapper::close);
         workerPool.clear();

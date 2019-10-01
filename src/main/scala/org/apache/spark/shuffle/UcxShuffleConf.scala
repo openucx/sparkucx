@@ -7,7 +7,7 @@ package org.apache.spark.shuffle
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.Utils
 
@@ -17,12 +17,6 @@ import org.apache.spark.util.Utils
  */
 class UcxShuffleConf(conf: SparkConf) extends SparkConf {
   private def getUcxConf(name: String) = s"spark.shuffle.ucx.$name"
-
-  // Memory Pool
-  private lazy val PREALLOCATE_BUFFERS =
-  ConfigBuilder(getUcxConf("memory.preAllocateBuffers"))
-    .doc("Comma separated list of buffer size : buffer count pairs to preallocate in memory pool. E.g. 4k:1000,16k:500")
-    .stringConf.createWithDefault(s"")
 
   lazy val blockManagerPort: Int = getInt("spark.blockManager.port", 0)
 
@@ -37,14 +31,14 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
   lazy val driverPort: Int = conf.getInt(getUcxConf("driver.port"), 55443)
 
   // Metadata
-  val METADATA_BLOCK_SIZE =
+  val METADATA_BLOCK_SIZE: ConfigEntry[Long] =
     ConfigBuilder(getUcxConf("rkeySize"))
     .doc("Maximum size of rKeyBuffer")
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(150)
 
   // For metadata we publish index file + data file rkeys
-  lazy val metadataBlockSize = 2 * conf.getSizeAsBytes(METADATA_BLOCK_SIZE.key,
+  lazy val metadataBlockSize: Long = 2 * conf.getSizeAsBytes(METADATA_BLOCK_SIZE.key,
     METADATA_BLOCK_SIZE.defaultValueString)
 
   private lazy val METADATA_RPC_BUFFER_SIZE =
@@ -53,7 +47,7 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4096)
 
-  lazy val metadataRPCBufferSize = conf.getSizeAsBytes(METADATA_RPC_BUFFER_SIZE.key,
+  lazy val metadataRPCBufferSize: Int = conf.getSizeAsBytes(METADATA_RPC_BUFFER_SIZE.key,
     METADATA_RPC_BUFFER_SIZE.defaultValueString).toInt
 
   // Memory Pool
@@ -76,7 +70,7 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4096)
 
-  lazy val minBufferSize = conf.getSizeAsBytes(MIN_BUFFER_SIZE.key,
+  lazy val minBufferSize: Long = conf.getSizeAsBytes(MIN_BUFFER_SIZE.key,
     MIN_BUFFER_SIZE.defaultValueString)
 
   private lazy val MIN_REGISTRATION_SIZE =
@@ -85,7 +79,7 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     .bytesConf(ByteUnit.MiB)
     .createWithDefault(4)
 
-  lazy val minRegistrationSize = conf.getSizeAsBytes(MIN_REGISTRATION_SIZE.key,
+  lazy val minRegistrationSize: Int = conf.getSizeAsBytes(MIN_REGISTRATION_SIZE.key,
     MIN_REGISTRATION_SIZE.defaultValueString).toInt
             
   private lazy val MIN_ALLOCATION_SIZE = ConfigBuilder(getUcxConf("memory.minAllocationSize"))
@@ -93,7 +87,7 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4096)
 
-  lazy val minAllocationSize = conf.getSizeAsBytes(MIN_ALLOCATION_SIZE.key, MIN_ALLOCATION_SIZE.defaultValueString)
+  lazy val minAllocationSize: Long = conf.getSizeAsBytes(MIN_ALLOCATION_SIZE.key, MIN_ALLOCATION_SIZE.defaultValueString)
 
   private lazy val PREREGISTER_MEMORY = ConfigBuilder(getUcxConf("memory.preregister"))
     .doc("Whether to do ucp mem map for allocated memory in memory pool")

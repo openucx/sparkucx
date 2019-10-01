@@ -50,9 +50,17 @@ public class MemoryPool implements Closeable {
     private RegisteredMemory get() {
       RegisteredMemory result = stack.pollFirst();
       if (result == null) {
-        int numBuffers = Math.max(conf.minRegistrationSize() / length, 1);
-        preallocate(numBuffers);
-        return stack.pollFirst();
+        if (length < conf.minRegistrationSize()) {
+          int numBuffers = conf.minRegistrationSize() / length;
+          logger.debug("Allocating {} buffers of size {}", numBuffers, length);
+          preallocate(numBuffers);
+          return get();
+        } else {
+          ByteBuffer buffer = malloc(length);
+          UcpMemory memory = register(buffer);
+          result = new RegisteredMemory(new AtomicInteger(1), memory, buffer);
+          totalAlloc.incrementAndGet();
+        }
       } else {
         result.getRefCount().incrementAndGet();
       }

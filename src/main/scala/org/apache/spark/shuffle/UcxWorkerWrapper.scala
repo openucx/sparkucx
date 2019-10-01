@@ -31,7 +31,7 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf,
 
   private final val socketAddress = new InetSocketAddress(conf.driverHost, conf.driverPort)
   private final val endpointParams = new UcpEndpointParams().setSocketAddress(socketAddress)
-    //.setPeerErrorHadnlingMode()
+    .setPeerErrorHadnlingMode()
   val driverEndpoint: UcpEndpoint = worker.newEndpoint(endpointParams)
 
   final val driverMetadataBuffer = mutable.Map.empty[ShuffleId, DriverMetadaBuffer]
@@ -129,9 +129,9 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf,
     connections.getOrElseUpdate(blockManagerId, {
       logInfo(s"Worker $id connecting to $blockManagerId")
       val endpointParams = new UcpEndpointParams()
-        //.setPeerErrorHadnlingMode()
+        .setPeerErrorHadnlingMode()
         .setUcpAddress(workerAdresses.get(blockManagerId))
-      worker.newEndpoint(endpointParams)
+     worker.newEndpoint(endpointParams)
     })
   }
 
