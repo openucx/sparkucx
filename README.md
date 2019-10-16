@@ -1,8 +1,8 @@
 # SparkUCX ShuffleManager Plugin
-SparkUCX is a high performance ShuffleManager plugin for Apache Spark that uses RDMA and other high performance
-transport, supported by [UCX](https://github.com/openucx/ucx#supported-transports) when performing Shuffle data transfers in Spark jobs.
+SparkUCX is a high performance ShuffleManager plugin for Apache Spark, that uses RDMA and other high performance transports
+that are supported by [UCX](https://github.com/openucx/ucx#supported-transports), to perform Shuffle data transfers in Spark jobs.
 
-This open-source project is developed, maintained and supported by [UCF consortium](http://www.ucfconsortium.org/).
+This open-source project is developed, maintained and supported by the [UCF consortium](http://www.ucfconsortium.org/).
 
 ## Runtime requirements
 * Apache Spark 2.3/2.4
@@ -14,7 +14,7 @@ This open-source project is developed, maintained and supported by [UCF consorti
 ### Obtain SparkUCX
 Please use the ["Releases"](https://github.com/openucx/sparkucx/releases) page to download SparkUCX jar file
 for your spark version (e.g. spark-ucx-1.0-for-spark-2.4.0-jar-with-dependencies.jar).
-Put SparkUCX jar file to $SPARK_UCX_HOME on all the nodes in your cluster.
+Put SparkUCX jar file in $SPARK_UCX_HOME on all the nodes in your cluster.
 <br>If you would like to build the project yourself, please refer to the ["Build"](https://github.com/openucx/sparkucx#build) section below.
 
 Ucx binaries **must** be in `java.library.path` on every Spark Master and Worker.
@@ -45,7 +45,7 @@ spark.executor.extraJavaOptions    -Djava.library.path=$UCX_PREFIX/lib
 ```
 
 To enable the SparkUCX Shuffle Manager plugin, add the following configuration property
-to spark (e.g. $SPARK_HOME/conf/spark-defaults.conf):
+to spark (e.g. in $SPARK_HOME/conf/spark-defaults.conf):
 
 ```
 spark.shuffle.manager   org.apache.spark.shuffle.UcxShuffleManager
