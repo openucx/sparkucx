@@ -4,15 +4,26 @@
  */
 package org.apache.spark.shuffle.ucx;
 
+import com.esotericsoftware.kryo.io.ByteBufferInputStream;
+import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.UcxShuffleConf;
 import org.apache.spark.shuffle.UcxWorkerWrapper;
 import org.apache.spark.shuffle.ucx.memory.MemoryPool;
+import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.BlockManagerId;
+import org.apache.spark.unsafe.Platform;
+import org.openucx.jucx.UcxCallback;
+import org.openucx.jucx.UcxRequest;
 import org.openucx.jucx.ucp.*;
 
 import java.io.Closeable;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -27,8 +38,11 @@ public class UcxNode implements Closeable {
   private final UcpContext context;
   private final MemoryPool memoryPool;
   private final UcpWorkerParams workerParams = new UcpWorkerParams().requestThreadSafety();
-  private UcpWorker globalWorker;
   private UcpListener listener;
+  private final UcpWorker globalWorker;
+  private UcpEndpoint globalDriverEndpoint;
+  private final RegisteredMemory metadataMemory;
+
   private boolean closed = false;
 
   private final Set<UcxWorkerWrapper> workerPool = ConcurrentHashMap.newKeySet();
@@ -40,35 +54,83 @@ public class UcxNode implements Closeable {
   private static final AtomicInteger numWorkers = new AtomicInteger(0);
 
   public UcxNode(UcxShuffleConf conf, boolean isDriver) {
-    UcpParams params = new UcpParams().requestRmaFeature().requestWakeupFeature()
+    UcpParams params = new UcpParams().requestTagFeature()
+      .requestRmaFeature().requestWakeupFeature()
       .setMtWorkersShared(true)
       .setEstimatedNumEps(conf.coresPerProcess() * (long)conf.getNumProcesses());
     context = new UcpContext(params);
     memoryPool = new MemoryPool(context, conf);
     globalWorker = context.newWorker(workerParams);
-    InetSocketAddress socketAddress;
+    InetSocketAddress driverAddress = new InetSocketAddress(conf.driverHost(), conf.driverPort());
+    metadataMemory = memoryPool.get(conf.metadataRPCBufferSize());
+    ByteBuffer metadataBuffer = metadataMemory.getBuffer();
+    metadataBuffer.order(ByteOrder.nativeOrder());
+
     if (isDriver) {
-      socketAddress = new InetSocketAddress(conf.driverHost(), conf.driverPort());
+      // Start listener on a driver and accept RPC messages from executors with their
+      // worker addresses
+      UcpListenerParams listenerParams = new UcpListenerParams().setSockAddr(driverAddress);
+      listener = globalWorker.newListener(listenerParams);
+      logger.info("Started UcxNode on {}", driverAddress);
     } else {
+      globalDriverEndpoint = globalWorker.newEndpoint(
+        new UcpEndpointParams().setSocketAddress(driverAddress).setPeerErrorHadnlingMode()
+      );
       BlockManagerId blockManagerId = SparkEnv.get().blockManager().blockManagerId();
-      socketAddress = new InetSocketAddress(blockManagerId.host(), blockManagerId.port() + 7);
+      ByteBuffer workerAddresss = globalWorker.getAddress();
+      metadataBuffer.putInt(workerAddresss.capacity());
+      metadataBuffer.put(workerAddresss);
+      try {
+        logger.info("MB position: {}", metadataBuffer.position());
+        blockManagerId.writeExternal(
+          new ObjectOutputStream(new ByteBufferOutputStream(metadataBuffer)));
+        logger.info("MB position: {}", metadataBuffer.position());
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+
+      metadataBuffer.clear();
+      globalDriverEndpoint.sendTaggedNonBlocking(metadataBuffer, new UcxCallback() {
+        @Override
+        public void onSuccess(UcxRequest request) {
+          workerAddresss.clear();
+          logger.info("Sent data to driver: {} : #{}, #:{}", workerAddresss.capacity(),
+            workerAddresss.hashCode(), metadataBuffer.hashCode());
+          metadataBuffer.clear();
+        }
+      });
     }
-    UcpListenerParams listenerParams = new UcpListenerParams().setSockAddr(socketAddress);
-    listener = globalWorker.newListener(listenerParams);
-    logger.info("Started UcxNode on {}", socketAddress);
+
 
     // Global listener thread, that keeps lazy progress for connection establishment
     listenerProgressThread = new Thread() {
       @Override
       public void run() {
         while (!isInterrupted()) {
-          try {
-            if (globalWorker.progress() == 0) {
-              globalWorker.waitForEvents();
+          globalWorker.recvTaggedNonBlocking(metadataBuffer, new UcxCallback() {
+            @Override
+            public void onSuccess(UcxRequest request) {
+              metadataBuffer.clear();
+              logger.info("Metadata buffer #:{}", metadataBuffer.hashCode());
+              int workerAddressSize = metadataBuffer.getInt();
+              logger.info("WorkerAddress size {}", workerAddressSize);
+              ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
+              for (int i = 0; i < workerAddressSize; i++) {
+                workerAddress.put(metadataBuffer.get());
+              }
+              BlockManagerId blockManagerId = null;
+              try {
+                blockManagerId = BlockManagerId.apply(
+                  new ObjectInputStream(new ByteBufferInputStream(metadataBuffer)));
+              } catch (IOException e) {
+                e.printStackTrace();
+              }
+              logger.info("Received message. BlockManagerId :{}, workerAddress: {}",
+                blockManagerId, workerAddress.hashCode());
             }
-          } catch (Exception ex) {
-            logger.error("Fail during progress. Stoping...");
-            close();
+          });
+          if (globalWorker.progress() == 0) {
+            globalWorker.waitForEvents();
           }
         }
       }
@@ -115,10 +177,17 @@ public class UcxNode implements Closeable {
     synchronized (this) {
       if (!closed) {
         logger.info("Stopping UcxNode");
+        memoryPool.put(metadataMemory);
         listenerProgressThread.interrupt();
+        if (globalDriverEndpoint != null) {
+          globalDriverEndpoint.close();
+        }
         globalWorker.signal();
         memoryPool.close();
-        listener.close();
+        if (listener != null) {
+          listener.close();
+        }
+
         globalWorker.close();
         workerPool.forEach(UcxWorkerWrapper::close);
         workerPool.clear();

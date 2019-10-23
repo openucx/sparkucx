@@ -43,9 +43,18 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(150)
 
-  lazy val metadataBlockSize = conf.getSizeAsBytes(METADATA_BLOCK_SIZE.key,
+  // For metadata we publish index file + data file rkeys
+  lazy val metadataBlockSize = 2 * conf.getSizeAsBytes(METADATA_BLOCK_SIZE.key,
     METADATA_BLOCK_SIZE.defaultValueString)
 
+  private lazy val METADATA_RPC_BUFFER_SIZE =
+    ConfigBuilder(getUcxConf("rpc.metadata.bufferSize"))
+    .doc("Buffer size of worker -> driver metadata message")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(4096)
+
+  lazy val metadataRPCBufferSize = conf.getSizeAsBytes(METADATA_RPC_BUFFER_SIZE.key,
+    METADATA_RPC_BUFFER_SIZE.defaultValueString).toInt
 
   // Memory Pool
   private lazy val PREALLOCATE_BUFFERS =
