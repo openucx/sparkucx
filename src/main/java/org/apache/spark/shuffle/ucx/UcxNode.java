@@ -10,7 +10,6 @@ import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.UcxShuffleConf;
 import org.apache.spark.shuffle.UcxWorkerWrapper;
 import org.apache.spark.shuffle.ucx.memory.MemoryPool;
-import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.BlockManagerId;
 import org.apache.spark.unsafe.Platform;
 import org.openucx.jucx.UcxCallback;
@@ -24,6 +23,8 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,11 +42,13 @@ public class UcxNode implements Closeable {
   private UcpListener listener;
   private final UcpWorker globalWorker;
   private UcpEndpoint globalDriverEndpoint;
-  private final RegisteredMemory metadataMemory;
 
   private boolean closed = false;
 
-  private final Set<UcxWorkerWrapper> workerPool = ConcurrentHashMap.newKeySet();
+  private static final Set<UcxWorkerWrapper> workerPool = ConcurrentHashMap.newKeySet();
+  private static final Map<BlockManagerId, ByteBuffer> workerAdresses = new ConcurrentHashMap<>();
+  private static final ConcurrentHashMap<UcpEndpoint, ByteBuffer> rpcConnections =
+    new ConcurrentHashMap<>();
 
   private final ThreadLocal<UcxWorkerWrapper> worker;
   private final Thread listenerProgressThread;
@@ -56,15 +59,12 @@ public class UcxNode implements Closeable {
   public UcxNode(UcxShuffleConf conf, boolean isDriver) {
     UcpParams params = new UcpParams().requestTagFeature()
       .requestRmaFeature().requestWakeupFeature()
-      .setMtWorkersShared(true)
-      .setEstimatedNumEps(conf.coresPerProcess() * (long)conf.getNumProcesses());
+      .setMtWorkersShared(true);
     context = new UcpContext(params);
     memoryPool = new MemoryPool(context, conf);
     globalWorker = context.newWorker(workerParams);
     InetSocketAddress driverAddress = new InetSocketAddress(conf.driverHost(), conf.driverPort());
-    metadataMemory = memoryPool.get(conf.metadataRPCBufferSize());
-    ByteBuffer metadataBuffer = metadataMemory.getBuffer();
-    metadataBuffer.order(ByteOrder.nativeOrder());
+
 
     if (isDriver) {
       // Start listener on a driver and accept RPC messages from executors with their
@@ -74,19 +74,22 @@ public class UcxNode implements Closeable {
       logger.info("Started UcxNode on {}", driverAddress);
     } else {
       globalDriverEndpoint = globalWorker.newEndpoint(
-        new UcpEndpointParams().setSocketAddress(driverAddress).setPeerErrorHadnlingMode()
+        new UcpEndpointParams().setSocketAddress(driverAddress)//.setPeerErrorHadnlingMode()
       );
       BlockManagerId blockManagerId = SparkEnv.get().blockManager().blockManagerId();
       ByteBuffer workerAddresss = globalWorker.getAddress();
+
+      ByteBuffer metadataBuffer = Platform.allocateDirectBuffer(conf.metadataRPCBufferSize());
+      metadataBuffer.order(ByteOrder.nativeOrder());
       metadataBuffer.putInt(workerAddresss.capacity());
       metadataBuffer.put(workerAddresss);
       try {
-        logger.info("MB position: {}", metadataBuffer.position());
-        blockManagerId.writeExternal(
-          new ObjectOutputStream(new ByteBufferOutputStream(metadataBuffer)));
-        logger.info("MB position: {}", metadataBuffer.position());
+        ObjectOutputStream oos = new ObjectOutputStream(
+          new ByteBufferOutputStream(metadataBuffer));
+        blockManagerId.writeExternal(oos);
+        oos.close();
       } catch (IOException e) {
-        e.printStackTrace();
+        logger.error("Exception on serializing BlockManager: {}", e.getMessage());
       }
 
       metadataBuffer.clear();
@@ -101,34 +104,62 @@ public class UcxNode implements Closeable {
       });
     }
 
-
     // Global listener thread, that keeps lazy progress for connection establishment
     listenerProgressThread = new Thread() {
+
+      private UcxRequest recvRequest() {
+        ByteBuffer metadataBuffer = Platform.allocateDirectBuffer(conf.metadataRPCBufferSize());
+        metadataBuffer.order(ByteOrder.nativeOrder());
+        return globalWorker.recvTaggedNonBlocking(metadataBuffer, new UcxCallback() {
+          @Override
+          public void onSuccess(UcxRequest request) {
+            int workerAddressSize = metadataBuffer.getInt();
+            ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
+            for (int i = 0; i < workerAddressSize; i++) {
+              workerAddress.put(metadataBuffer.get());
+            }
+            BlockManagerId blockManagerId = null;
+            try {
+              ObjectInputStream ois =
+                new ObjectInputStream(new ByteBufferInputStream(metadataBuffer));
+              blockManagerId = BlockManagerId.apply(ois);
+              ois.close();
+            } catch (IOException e) {
+              logger.error("Failed to deserialize BlockManagerId: {}",
+                e.getMessage());
+            }
+            logger.info("Received message from {}", blockManagerId);
+            workerAddress.clear();
+            if (isDriver) {
+              metadataBuffer.clear();
+              UcpEndpoint newConnection = globalWorker.newEndpoint(
+                new UcpEndpointParams().setPeerErrorHadnlingMode()
+                  .setUcpAddress(workerAddress));
+              // For each existing connection
+              rpcConnections.keySet().forEach(connection -> {
+                // send address of joined worker to already connected workers
+                connection.sendTaggedNonBlocking(metadataBuffer, null);
+                // introduce other workers to joined worker
+                newConnection.sendTaggedNonBlocking(rpcConnections.get(connection), null);
+              });
+
+              rpcConnections.put(newConnection, metadataBuffer);
+            }
+            workerAdresses.put(blockManagerId, workerAddress);
+            synchronized (workerAdresses) {
+              workerAdresses.notifyAll();
+            }
+          }
+        });
+      }
+
       @Override
       public void run() {
+        UcxRequest recv = recvRequest();
         while (!isInterrupted()) {
-          globalWorker.recvTaggedNonBlocking(metadataBuffer, new UcxCallback() {
-            @Override
-            public void onSuccess(UcxRequest request) {
-              metadataBuffer.clear();
-              logger.info("Metadata buffer #:{}", metadataBuffer.hashCode());
-              int workerAddressSize = metadataBuffer.getInt();
-              logger.info("WorkerAddress size {}", workerAddressSize);
-              ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
-              for (int i = 0; i < workerAddressSize; i++) {
-                workerAddress.put(metadataBuffer.get());
-              }
-              BlockManagerId blockManagerId = null;
-              try {
-                blockManagerId = BlockManagerId.apply(
-                  new ObjectInputStream(new ByteBufferInputStream(metadataBuffer)));
-              } catch (IOException e) {
-                e.printStackTrace();
-              }
-              logger.info("Received message. BlockManagerId :{}, workerAddress: {}",
-                blockManagerId, workerAddress.hashCode());
-            }
-          });
+          if (recv.isCompleted()) {
+            recv = recvRequest();
+          }
           if (globalWorker.progress() == 0) {
             globalWorker.waitForEvents();
           }
@@ -167,6 +198,10 @@ public class UcxNode implements Closeable {
     return worker.get();
   }
 
+  public static Map<BlockManagerId, ByteBuffer> getWorkerAddresses() {
+    return workerAdresses;
+  }
+
   public void putWorker(UcxWorkerWrapper workerWrapper) {
     workerPool.add(workerWrapper);
   }
@@ -177,7 +212,6 @@ public class UcxNode implements Closeable {
     synchronized (this) {
       if (!closed) {
         logger.info("Stopping UcxNode");
-        memoryPool.put(metadataMemory);
         listenerProgressThread.interrupt();
         if (globalDriverEndpoint != null) {
           globalDriverEndpoint.close();
@@ -186,8 +220,12 @@ public class UcxNode implements Closeable {
         memoryPool.close();
         if (listener != null) {
           listener.close();
+          listener = null;
         }
-
+        for (UcpEndpoint connection : rpcConnections.keySet()) {
+          connection.close();
+        }
+        rpcConnections.clear();
         globalWorker.close();
         workerPool.forEach(UcxWorkerWrapper::close);
         workerPool.clear();

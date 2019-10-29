@@ -115,18 +115,10 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     val request = driverEndpoint.putNonBlocking(UcxUtils.getAddress(metadataBuffer),
       metadataBuffer.remaining(), driverOffset, driverMetadata.ucpRkey, null)
 
-    try {
-      workerWrapper.preConnect()
-      workerWrapper.progressRequest(request)
-    } catch {
-      case exception: Throwable => logWarning(s"Failed to establish connection:" +
-        s"${exception.getLocalizedMessage}")
-        workerWrapper.clearConnections()
-    } finally {
-      memPool.put(metadataRegisteredMemory)
-      ucxShuffleManager.ucxNode.putWorker(workerWrapper)
-    }
-
+    workerWrapper.preconnnect()
+    workerWrapper.progressRequest(request)
+    memPool.put(metadataRegisteredMemory)
+    ucxShuffleManager.ucxNode.putWorker(workerWrapper)
     logInfo(s"MapID: $mapId Total overhead: ${Utils.getUsedTimeMs(s)}")
   }
 

@@ -9,6 +9,8 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
+import scala.collection.JavaConverters._
+
 import scala.collection.mutable
 import scala.util.Try
 
@@ -16,6 +18,7 @@ import org.openucx.jucx.{UcxException, UcxRequest}
 import org.openucx.jucx.ucp.{UcpEndpoint, UcpEndpointParams, UcpRemoteKey, UcpWorker}
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
+import org.apache.spark.shuffle.ucx.UcxNode
 import org.apache.spark.storage.{BlockManager, BlockManagerId}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
@@ -28,7 +31,7 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf,
 
   private final val socketAddress = new InetSocketAddress(conf.driverHost, conf.driverPort)
   private final val endpointParams = new UcpEndpointParams().setSocketAddress(socketAddress)
-    .setPeerErrorHadnlingMode()
+    //.setPeerErrorHadnlingMode()
   val driverEndpoint: UcpEndpoint = worker.newEndpoint(endpointParams)
 
   final val driverMetadataBuffer = mutable.Map.empty[ShuffleId, DriverMetadaBuffer]
@@ -40,10 +43,6 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf,
   val blockManager: BlockManager = SparkEnv.get.blockManager
 
   private final val connections = mutable.Map.empty[BlockManagerId, UcpEndpoint]
-
-  def preConnect(): Unit = {
-    blockManager.master.getPeers(blockManager.blockManagerId).foreach(getConnection)
-  }
 
   override def close(): Unit = {
     driverMetadataBuffer.values.foreach(_.ucpRkey.close())
@@ -110,21 +109,28 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf,
    * The only place for worker progress
    */
   private def progress(): Int = {
-    try {
-      worker.progress()
-    } catch {
-      case ex: Exception =>
-        logError(s"Exception during worker(${worker.getNativeId}) progress: ${ex.getMessage}")
-        0
-    }
+    worker.progress()
+  }
+
+  def preconnnect(): Unit = {
+    UcxNode.getWorkerAddresses.keySet().asScala.foreach(getConnection)
   }
 
   def getConnection(blockManagerId: BlockManagerId): UcpEndpoint = {
+    val workerAdresses = UcxNode.getWorkerAddresses
+    if (workerAdresses.get(blockManagerId) == null) {
+      workerAdresses.synchronized {
+        while (workerAdresses.get(blockManagerId) == null) {
+          workerAdresses.wait()
+        }
+      }
+    }
+
     connections.getOrElseUpdate(blockManagerId, {
       logInfo(s"Worker $id connecting to $blockManagerId")
       val endpointParams = new UcpEndpointParams()
-        .setPeerErrorHadnlingMode()
-        .setSocketAddress(new InetSocketAddress(blockManagerId.host, blockManagerId.port + 7))
+        //.setPeerErrorHadnlingMode()
+        .setUcpAddress(workerAdresses.get(blockManagerId))
       worker.newEndpoint(endpointParams)
     })
   }
