@@ -70,8 +70,10 @@ public class MemoryPool implements Closeable {
     }
 
     private void preallocate(int numBuffers) {
-      while ((long)length * (long)numBuffers > Integer.MAX_VALUE) {
-        numBuffers--;
+      // Platform.allocateDirectBuffer supports only 2GB of buffer.
+      // Decrease number of buffers if total size of preAllocation > 2GB.
+      if ((long)length * (long)numBuffers > Integer.MAX_VALUE) {
+        numBuffers = Integer.MAX_VALUE / length;
       }
       ByteBuffer buffer = Platform.allocateDirectBuffer(length * numBuffers);
       UcpMemory memory = null;
