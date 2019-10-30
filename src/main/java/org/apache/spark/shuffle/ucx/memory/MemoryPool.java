@@ -50,11 +50,8 @@ public class MemoryPool implements Closeable {
     private RegisteredMemory get() {
       RegisteredMemory result = stack.pollFirst();
       if (result == null) {
-        ByteBuffer buffer = Platform.allocateDirectBuffer(length);
-        UcpMemory memory = null;
-        if (conf.preregisterMemory()) {
-          memory = context.registerMemory(buffer);
-        }
+        ByteBuffer buffer = malloc(length);
+        UcpMemory memory = register(buffer);
         result = new RegisteredMemory(new AtomicInteger(1), memory, buffer);
         totalAlloc.incrementAndGet();
       } else {
@@ -69,17 +66,27 @@ public class MemoryPool implements Closeable {
       stack.addLast(registeredMemory);
     }
 
+    private ByteBuffer malloc(int size) {
+      return Platform.allocateDirectBuffer(size);
+    }
+
+    private UcpMemory register(ByteBuffer buffer) {
+      UcpMemory memory = null;
+      if (conf.preregisterMemory()) {
+        memory = context.registerMemory(buffer);
+      }
+      return memory;
+    }
+
     private void preallocate(int numBuffers) {
       // Platform.allocateDirectBuffer supports only 2GB of buffer.
       // Decrease number of buffers if total size of preAllocation > 2GB.
       if ((long)length * (long)numBuffers > Integer.MAX_VALUE) {
         numBuffers = Integer.MAX_VALUE / length;
       }
-      ByteBuffer buffer = Platform.allocateDirectBuffer(length * numBuffers);
-      UcpMemory memory = null;
-      if (conf.preregisterMemory()) {
-        memory = context.registerMemory(buffer);
-      }
+
+      ByteBuffer buffer = malloc(numBuffers * length);
+      UcpMemory memory = register(buffer);
       AtomicInteger refCount = new AtomicInteger(numBuffers);
       for (int i = 0; i < numBuffers; i++) {
         buffer.position(i * length).limit(i * length + length);
