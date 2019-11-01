@@ -50,10 +50,9 @@ public class MemoryPool implements Closeable {
     private RegisteredMemory get() {
       RegisteredMemory result = stack.pollFirst();
       if (result == null) {
-        ByteBuffer buffer = malloc(length);
-        UcpMemory memory = register(buffer);
-        result = new RegisteredMemory(new AtomicInteger(1), memory, buffer);
-        totalAlloc.incrementAndGet();
+        int numBuffers = Math.max(conf.minRegistrationSize() / length, 1);
+        preallocate(numBuffers);
+        return stack.pollFirst();
       } else {
         result.getRefCount().incrementAndGet();
       }
@@ -121,8 +120,8 @@ public class MemoryPool implements Closeable {
 
   private long roundUpToTheNextPowerOf2(long length) {
     // Round up length to the nearest power of two, or the minimum block size
-    if (length < conf.minAllocationSize()) {
-      length = conf.minAllocationSize();
+    if (length < conf.minBufferSize()) {
+      length = conf.minBufferSize();
     } else {
       length--;
       length |= length >> 1;
