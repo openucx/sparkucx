@@ -17,7 +17,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
-
 /**
  * Utility class to reuse and preallocate registered memory to avoid memory allocation
  * and registration during shuffle phase.
@@ -54,7 +53,12 @@ public class MemoryPool implements Closeable {
           int numBuffers = conf.minRegistrationSize() / length;
           logger.debug("Allocating {} buffers of size {}", numBuffers, length);
           preallocate(numBuffers);
-          return get();
+          result = stack.pollFirst();
+          if (result == null) {
+            return get();
+          } else {
+            result.getRefCount().incrementAndGet();
+          }
         } else {
           ByteBuffer buffer = malloc(length);
           UcpMemory memory = register(buffer);
@@ -130,7 +134,7 @@ public class MemoryPool implements Closeable {
     // Round up length to the nearest power of two, or the minimum block size
     if (length < conf.minBufferSize()) {
       length = conf.minBufferSize();
-   } else {
+    } else {
       length--;
       length |= length >> 1;
       length |= length >> 2;
