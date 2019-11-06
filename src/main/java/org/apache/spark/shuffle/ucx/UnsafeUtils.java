@@ -15,7 +15,6 @@ import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 
-
 /**
  * Java's native mmap functionality, that allows to mmap files > 2GB.
  */

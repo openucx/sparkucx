@@ -11,7 +11,6 @@ import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.Utils
 
-
 /**
  * Plugin configuration properties.
  */
@@ -55,7 +54,6 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     ConfigBuilder(getUcxConf("memory.preAllocateBuffers"))
       .doc("Comma separated list of buffer size : buffer count pairs to preallocate in memory pool. E.g. 4k:1000,16k:500")
       .stringConf.createWithDefault("")
-
   lazy val preallocateBuffersMap: java.util.Map[java.lang.Integer, java.lang.Integer] = {
     conf.get(PREALLOCATE_BUFFERS).split(",").withFilter(s => !s.isEmpty)
       .map(entry => entry.split(":") match {
@@ -68,27 +66,19 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
   private lazy val MIN_BUFFER_SIZE = ConfigBuilder(getUcxConf("memory.minBufferSize"))
     .doc("Minimal buffer size in memory pool.")
     .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(4096)
+    .createWithDefault(1024)
 
   lazy val minBufferSize: Long = conf.getSizeAsBytes(MIN_BUFFER_SIZE.key,
     MIN_BUFFER_SIZE.defaultValueString)
 
   private lazy val MIN_REGISTRATION_SIZE =
     ConfigBuilder(getUcxConf("memory.minAllocationSize"))
-    .doc("Minimal memory registration size in memory pool")
+    .doc("Minimal memory registration size in memory pool.")
     .bytesConf(ByteUnit.MiB)
     .createWithDefault(4)
 
   lazy val minRegistrationSize: Int = conf.getSizeAsBytes(MIN_REGISTRATION_SIZE.key,
     MIN_REGISTRATION_SIZE.defaultValueString).toInt
-            
-  private lazy val MIN_ALLOCATION_SIZE = ConfigBuilder(getUcxConf("memory.minAllocationSize"))
-    .doc("Minimal memory allocation size in memory pool")
-    .bytesConf(ByteUnit.BYTE)
-    .createWithDefault(4096)
-
-  lazy val minAllocationSize: Long = conf.getSizeAsBytes(MIN_ALLOCATION_SIZE.key, MIN_ALLOCATION_SIZE.defaultValueString)
-
   private lazy val PREREGISTER_MEMORY = ConfigBuilder(getUcxConf("memory.preregister"))
     .doc("Whether to do ucp mem map for allocated memory in memory pool")
     .booleanConf.createWithDefault(true)

@@ -54,7 +54,7 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     fileMappings.putIfAbsent(shuffleId, new ConcurrentHashMap[MapId, UcpMemory]())
     offsetMappings.putIfAbsent(shuffleId, new ConcurrentHashMap[MapId, UcpMemory]())
 
-    val workerWrapper = ucxShuffleManager.ucxNode.getWorker
+    val workerWrapper = ucxShuffleManager.ucxNode.getThreadLocalWorker
     workerWrapper.addDriverMetadata(ucxShuffleManager.shuffleIdToHandle(shuffleId))
 
     val indexFile = getIndexFile(shuffleId, mapId)
@@ -118,7 +118,6 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     workerWrapper.preconnnect()
     workerWrapper.progressRequest(request)
     memPool.put(metadataRegisteredMemory)
-    ucxShuffleManager.ucxNode.putWorker(workerWrapper)
     logInfo(s"MapID: $mapId Total overhead: ${Utils.getUsedTimeMs(s)}")
   }
 

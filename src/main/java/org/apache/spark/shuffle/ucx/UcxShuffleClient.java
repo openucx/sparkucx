@@ -38,16 +38,13 @@ public class UcxShuffleClient extends ShuffleClient {
   private final UcxShuffleManager ucxShuffleManager;
   private final ShuffleHandle handle;
   private final TempShuffleReadMetrics shuffleReadMetrics;
-  private final UcxWorkerWrapper workerWrapper;
 
   public UcxShuffleClient(ShuffleHandle handle,
-                          TempShuffleReadMetrics shuffleReadMetrics,
-                          UcxWorkerWrapper workerWrapper) {
+                          TempShuffleReadMetrics shuffleReadMetrics) {
     this.ucxShuffleManager = (UcxShuffleManager) SparkEnv.get().shuffleManager();
     this.mempool = ucxShuffleManager.ucxNode().getMemoryPool();
     this.handle = handle;
     this.shuffleReadMetrics = shuffleReadMetrics;
-    this.workerWrapper = workerWrapper;
   }
 
   @Override
@@ -55,9 +52,11 @@ public class UcxShuffleClient extends ShuffleClient {
                           String[] blockIds, BlockFetchingListener listener,
                           DownloadFileManager downloadFileManager) {
     long startTime = System.currentTimeMillis();
+    UcxWorkerWrapper workerWrapper = ((UcxShuffleManager)SparkEnv.get().shuffleManager())
+      .ucxNode().getThreadLocalWorker();
     workerWrapper.addDriverMetadata(handle);
     workerWrapper.fetchDriverMetadataBuffer(handle);
-    BlockManagerId blockManagerId = BlockManagerId.apply(execId, host, port, Option.apply(null));
+    BlockManagerId blockManagerId = BlockManagerId.apply(execId, host, port, Option.empty());
     UcpEndpoint endpoint = workerWrapper.getConnection(blockManagerId);
     ByteBuffer metadata = workerWrapper.driverMetadataBuffer().get(handle.shuffleId()).get().data();
 
@@ -176,7 +175,6 @@ public class UcxShuffleClient extends ShuffleClient {
 
   @Override
   public void close() {
-    ucxShuffleManager.ucxNode().putWorker(workerWrapper);
     logger.info("Shuffle read metrics, fetch wait time: {}ms", shuffleReadMetrics.fetchWaitTime());
   }
 }

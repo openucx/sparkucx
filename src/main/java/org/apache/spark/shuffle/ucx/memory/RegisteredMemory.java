@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 
-
 /**
  * Structure to use 1 memory region for multiple ByteBuffers.
  * Keeps track on reference count to memory region.
