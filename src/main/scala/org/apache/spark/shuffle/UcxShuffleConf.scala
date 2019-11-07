@@ -7,7 +7,7 @@ package org.apache.spark.shuffle
 import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkConf
-import org.apache.spark.internal.config.ConfigBuilder
+import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.util.Utils
 
@@ -16,6 +16,26 @@ import org.apache.spark.util.Utils
  */
 class UcxShuffleConf(conf: SparkConf) extends SparkConf {
   private def getUcxConf(name: String) = s"spark.shuffle.ucx.$name"
+
+  lazy val getNumProcesses: Int = getInt("spark.executor.instances", 1)
+
+  lazy val coresPerProcess: Int = getInt("spark.executor.cores",
+    Runtime.getRuntime.availableProcessors())
+
+  lazy val driverHost: String = conf.get(getUcxConf("driver.host"),
+    conf.get("spark.driver.host", "0.0.0.0"))
+
+  lazy val driverPort: Int = conf.getInt(getUcxConf("driver.port"), 55443)
+
+  // Metadata
+  private lazy val METADATA_RPC_BUFFER_SIZE =
+    ConfigBuilder(getUcxConf("rpc.metadata.bufferSize"))
+      .doc("Buffer size of worker -> driver metadata message")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(4096)
+
+  lazy val metadataRPCBufferSize: Int = conf.getSizeAsBytes(METADATA_RPC_BUFFER_SIZE.key,
+    METADATA_RPC_BUFFER_SIZE.defaultValueString).toInt
 
   // Memory Pool
   private lazy val PREALLOCATE_BUFFERS =
