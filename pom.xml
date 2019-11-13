@@ -107,4 +107,30 @@ See file LICENSE for terms.
       </plugin>
     </plugins>
   </build>
+
+  <repositories>
+    <repository>
+      <id>Maven</id>
+      <url>https://pkgs.dev.azure.com/ucfconsort/sparkucx/_packaging/Maven/maven/v1</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
+  <distributionManagement>
+    <repository>
+      <id>Maven</id>
+      <url>https://pkgs.dev.azure.com/ucfconsort/sparkucx/_packaging/Maven/maven/v1</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+  </distributionManagement>
 </project>
