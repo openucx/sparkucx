@@ -79,9 +79,7 @@ public class MemoryPool implements Closeable {
     }
 
     private ByteBuffer malloc(int size) {
-      ByteBuffer result = Platform.allocateDirectBuffer(size);
-      result.order(ByteOrder.nativeOrder());
-      return result;
+      return Platform.allocateDirectBuffer(size);
     }
 
     private UcpMemory register(ByteBuffer buffer) {

@@ -29,7 +29,9 @@ class UcxShuffleReader[K, C](handle: BaseShuffleHandle[K, _, C],
     /** Read the combined key-values for this reduce task */
     override def read(): Iterator[Product2[K, C]] = {
       val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
-      val shuffleClient = new UcxShuffleClient(handle, shuffleMetrics)
+      val workerWrapper = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
+        .ucxNode.getThreadLocalWorker
+      val shuffleClient = new UcxShuffleClient(handle, shuffleMetrics, workerWrapper)
       val wrappedStreams = new ShuffleBlockFetcherIterator(
         context,
         shuffleClient,
@@ -50,8 +52,6 @@ class UcxShuffleReader[K, C](handle: BaseShuffleHandle[K, _, C],
       queueField.setAccessible(true)
       val itertorQueue = queueField.get(wrappedStreams).asInstanceOf[LinkedBlockingQueue[_]]
 
-      val workerWrapper = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
-        .ucxNode.getThreadLocalWorker
       val ucxWrappedStream = new Iterator[(BlockId, InputStream)] {
         override def next(): (BlockId, InputStream) = {
           val startTime = System.currentTimeMillis()

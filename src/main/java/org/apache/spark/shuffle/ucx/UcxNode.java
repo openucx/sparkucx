@@ -4,6 +4,7 @@
  */
 package org.apache.spark.shuffle.ucx;
 
+import com.esotericsoftware.kryo.io.ByteBufferOutputStream;
 import org.apache.spark.SparkEnv;
 import org.apache.spark.shuffle.UcxShuffleConf;
 import org.apache.spark.shuffle.UcxWorkerWrapper;
@@ -12,6 +13,7 @@ import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.shuffle.ucx.rpc.SerializableBlockManagerID;
 import org.apache.spark.shuffle.ucx.rpc.UcxListenerThread;
 import org.apache.spark.storage.BlockManagerId;
+import org.apache.spark.unsafe.Platform;
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxException;
 import org.openucx.jucx.UcxRequest;
@@ -19,6 +21,7 @@ import org.openucx.jucx.ucp.*;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -112,7 +115,7 @@ public class UcxNode implements Closeable {
     ByteBuffer workerAddresss = globalWorker.getAddress();
 
     RegisteredMemory metadataMemory = memoryPool.get(conf.metadataRPCBufferSize());
-    ByteBuffer metadataBuffer = metadataMemory.getBuffer();
+    ByteBuffer metadataBuffer =  metadataMemory.getBuffer();
     metadataBuffer.order(ByteOrder.nativeOrder());
     metadataBuffer.putInt(workerAddresss.capacity());
     metadataBuffer.put(workerAddresss);
@@ -123,7 +126,7 @@ public class UcxNode implements Closeable {
         e.getMessage());
       throw new UcxException(errorMsg);
     }
-
+    metadataBuffer.clear();
     // TODO: send using stream API when it would be available in jucx.
     globalDriverEndpoint.sendTaggedNonBlocking(metadataBuffer, new UcxCallback() {
       @Override

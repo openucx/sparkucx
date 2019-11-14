@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.concurrent.ConcurrentMap;
 
 /**
@@ -48,15 +49,11 @@ public class RpcConnectionCallback extends UcxCallback {
   public void onSuccess(UcxRequest request) {
     int workerAddressSize = metadataBuffer.getInt();
     ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
-    /*Platform.copyMemory(null,
-      UcxUtils.getAddress(metadataBuffer) + metadataBuffer.position(),
-      null,
-      UcxUtils.getAddress(workerAddress),
-      workerAddressSize);
-    metadataBuffer.position(metadataBuffer.position() + workerAddressSize);*/
-    for (int i = 0; i < workerAddressSize; i++) {
-      workerAddress.put(metadataBuffer.get());
-    }
+    final ByteBuffer copy = metadataBuffer.duplicate();
+    copy.limit(copy.position() + workerAddressSize);
+    workerAddress.put(copy);
+    metadataBuffer.position(metadataBuffer.position() + workerAddressSize);
+
     BlockManagerId blockManagerId;
     try {
       blockManagerId = SerializableBlockManagerID
