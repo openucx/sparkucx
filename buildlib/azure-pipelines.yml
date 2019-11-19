@@ -12,7 +12,7 @@ stages:
     jobs:
       - job: build
         pool:
-          vmImage: 'ubuntu-16.04'
+          name: MLNX
           demands: Maven
         steps:
           - task: Maven@3
@@ -22,14 +22,20 @@ stages:
               publishJUnitResults: false
               goals: "package"
               options: "-B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn"
-          - task: Maven@3
-            displayName: sonar
-            inputs:
-              jdkVersionOption: "1.8"
-              publishJUnitResults: false
-              goals: "sonar:sonar"
-              options: "-B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -Dsonar.projectKey=openucx:spark-ucx -Dsonar.organization=openucx -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=97f4df88ff4fa04e2d5b061acf07315717f1f08b"
-          - publish: '$(System.DefaultWorkingDirectory)/'
-            artifact: jar for spark-$(spark_version)
-            displayName: Publish jars
+          - bash: |
+              set -x
+              source buildlib/test.sh
 
+              if [[ $(get_rdma_device_iface) != "" ]]
+              then
+                export SPARK_UCX_JAR=$(System.DefaultWorkingDirectory)/target/spark-ucx-1.0-for-spark-2.4-jar-with-dependencies.jar
+                export SPARK_LOCAL_DIRS=$(System.DefaultWorkingDirectory)/target/spark
+                cd $(System.DefaultWorkingDirectory)/target/
+                if [[ -d /hpc/local/oss/spark/spark-2.4.4-bin-hadoop2.7 ]]
+                then
+                        export SPARK_HOME=/hpc/local/oss/spark/spark-2.4.4-bin-hadoop2.7
+                fi
+                run_tests
+              else
+                echo ##vso[task.complete result=Skipped;]No IB devices found
+              fi
