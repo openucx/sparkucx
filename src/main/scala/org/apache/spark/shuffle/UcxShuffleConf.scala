@@ -28,6 +28,17 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
   lazy val driverPort: Int = conf.getInt(getUcxConf("driver.port"), 55443)
 
   // Metadata
+
+  private lazy val RKEY_SIZE: ConfigEntry[Long] =
+  ConfigBuilder(getUcxConf("rkeySize"))
+    .doc("Maximum size of rKeyBuffer")
+    .bytesConf(ByteUnit.BYTE)
+    .createWithDefault(150)
+
+  // For metadata we publish index file + data file rkeys
+  lazy val metadataBlockSize: Long = 2 * conf.getSizeAsBytes(RKEY_SIZE.key,
+    RKEY_SIZE.defaultValueString)
+
   private lazy val METADATA_RPC_BUFFER_SIZE =
     ConfigBuilder(getUcxConf("rpc.metadata.bufferSize"))
       .doc("Buffer size of worker -> driver metadata message")

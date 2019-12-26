@@ -198,6 +198,7 @@ public class UcxNode implements Closeable {
       if (!closed) {
         logger.info("Stopping UcxNode");
         listenerProgressThread.interrupt();
+        globalWorker.signal();
         try {
           listenerProgressThread.join();
         } catch (InterruptedException e) {
@@ -211,7 +212,6 @@ public class UcxNode implements Closeable {
           stopExecutor();
         }
 
-        globalWorker.signal();
         memoryPool.close();
         globalWorker.close();
         context.close();
