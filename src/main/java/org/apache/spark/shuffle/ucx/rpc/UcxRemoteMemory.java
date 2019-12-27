@@ -43,4 +43,12 @@ public class UcxRemoteMemory implements Serializable {
     this.rkeyBuffer = ByteBuffer.allocateDirect(bufferSize).put(buffer);
     this.rkeyBuffer.clear();
   }
+
+  public long getAddress() {
+    return address;
+  }
+
+  public ByteBuffer getRkeyBuffer() {
+    return rkeyBuffer;
+  }
 }

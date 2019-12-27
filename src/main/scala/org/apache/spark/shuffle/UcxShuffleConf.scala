@@ -29,7 +29,7 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
 
   // Metadata
 
-  private lazy val RKEY_SIZE: ConfigEntry[Long] =
+  lazy val RKEY_SIZE: ConfigEntry[Long] =
   ConfigBuilder(getUcxConf("rkeySize"))
     .doc("Maximum size of rKeyBuffer")
     .bytesConf(ByteUnit.BYTE)

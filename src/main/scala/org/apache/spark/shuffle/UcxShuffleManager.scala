@@ -7,6 +7,7 @@ package org.apache.spark.shuffle
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
+import scala.collection.concurrent
 
 import org.openucx.jucx.ucp.UcpMemory
 import org.apache.spark.{ShuffleDependency, SparkConf, TaskContext}
@@ -26,6 +27,12 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
 
   val ucxShuffleConf = new UcxShuffleConf(conf)
   var ucxNode: UcxNode = _
+
+  // Shuffle handle is metadata information about the shuffle (num mappers, etc)
+  // distributed by Spark task broadcast protocol.
+  // UcxShuffleHandle is extension over Spark's shuffle handle to keep driver metadata info.
+  val shuffleIdToHandle: concurrent.Map[ShuffleId, ShuffleHandle] =
+    new ConcurrentHashMap[ShuffleId, ShuffleHandle]().asScala
 
   ShutdownHookManager.addShutdownHook(Int.MaxValue - 1)(stop)
 
@@ -90,8 +97,11 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
   override def getWriter[K, V](handle: ShuffleHandle, mapId: Int,
                                context: TaskContext): ShuffleWriter[K, V] = {
     startUcxNodeIfMissing()
+    shuffleIdToHandle.putIfAbsent(handle.shuffleId, handle)
     super.getWriter(handle, mapId, context)
   }
+
+  override val shuffleBlockResolver: UcxShuffleBlockResolver = new UcxShuffleBlockResolver(this)
 
   /**
    * Reducer callback on executor.
@@ -128,19 +138,19 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
  * Spark shuffle handles extensions, broadcasted by TCP to executors.
  * Added metadataBufferOnDriver field, that contains address and rkey of driver metadata buffer.
  */
-class UcxBaseShuffleHandle[K, V, C](metadataBufferOnDriver: UcxRemoteMemory,
+class UcxBaseShuffleHandle[K, V, C](val metadataBufferOnDriver: UcxRemoteMemory,
                                     shuffleId: Int,
                                     numMaps: Int,
                                     dependency: ShuffleDependency[K, V, C])
   extends BaseShuffleHandle[K, V, C](shuffleId, numMaps, dependency)
 
-class UcxSerializedShuffleHandle[K, V](metadataBufferOnDriver: UcxRemoteMemory,
+class UcxSerializedShuffleHandle[K, V](val metadataBufferOnDriver: UcxRemoteMemory,
                                        shuffleId: Int,
                                        numMaps: Int,
                                        dependency: ShuffleDependency[K, V, V])
   extends SerializedShuffleHandle[K, V](shuffleId, numMaps, dependency)
 
-class UcxBypassMergeSortShuffleHandle[K, V](metadataBufferOnDriver: UcxRemoteMemory,
+class UcxBypassMergeSortShuffleHandle[K, V](val metadataBufferOnDriver: UcxRemoteMemory,
                                             shuffleId: Int,
                                             numMaps: Int,
                                             dependency: ShuffleDependency[K, V, V])
