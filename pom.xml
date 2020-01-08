@@ -35,26 +35,11 @@ See file LICENSE for terms.
     <scala.compat.version>2.11</scala.compat.version>
   </properties>
 
-  <profiles>
-    <profile>
-      <id>spark-2.3</id>
-      <properties>
-        <spark.version>2.3.4</spark.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>spark-2.4</id>
-      <properties>
-        <spark.version>2.4.0</spark.version>
-      </properties>
-    </profile>
-  </profiles>
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.compat.version}</artifactId>
-      <version>${spark.version}</version>
+      <version>2.4.0</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -70,7 +55,17 @@ See file LICENSE for terms.
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <version>4.2.0</version>
+        <version>4.3.0</version>
+        <configuration>
+          <args>
+            <arg>-Xexperimental</arg>
+            <arg>-Xfatal-warnings</arg>
+            <arg>-explaintypes</arg>
+            <arg>-unchecked</arg>
+            <arg>-deprecation</arg>
+            <arg>-feature</arg>
+          </args>
+        </configuration>
         <executions>
           <execution>
             <id>compile</id>

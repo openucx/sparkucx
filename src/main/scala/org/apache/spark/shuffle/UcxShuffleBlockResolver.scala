@@ -103,7 +103,7 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     metadataBuffer.clear()
 
     val workerWrapper = ucxShuffleManager.ucxNode.getThreadLocalWorker
-    val driverMetadata = workerWrapper.getDriverMetadataBuffer(shuffleId)
+    val driverMetadata = workerWrapper.getDriverMetadata(shuffleId)
     val driverOffset = driverMetadata.address +
       mapId * ucxShuffleManager.ucxShuffleConf.metadataBlockSize
 
@@ -130,9 +130,9 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
   def removeShuffle(shuffleId: Int): Unit = {
     logInfo(s"Removing shuffle $shuffleId")
     fileMappings.remove(shuffleId).foreach((mappings: CopyOnWriteArrayList[UcpMemory]) =>
-      mappings.asScala.foreach(unregisterAndUnmap))
+      mappings.asScala.par.foreach(unregisterAndUnmap))
     offsetMappings.remove(shuffleId).foreach((mappings: CopyOnWriteArrayList[UcpMemory]) =>
-      mappings.asScala.foreach(unregisterAndUnmap))
+      mappings.asScala.par.foreach(unregisterAndUnmap))
   }
 
   override def close(): Unit = {
