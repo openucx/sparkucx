@@ -61,7 +61,7 @@ class UcxShuffleReader[K, C](handle: BaseShuffleHandle[K, _, C],
       val ucxWrappedStream = new Iterator[(BlockId, InputStream)] {
         override def next(): (BlockId, InputStream) = {
           val startTime = System.currentTimeMillis()
-          workerWrapper.progressRequests(resultQueue)
+          workerWrapper.fillQueueWithBlocks(resultQueue)
           shuffleMetrics.incFetchWaitTime(System.currentTimeMillis() - startTime)
           wrappedStreams.next()
         }

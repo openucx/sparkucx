@@ -66,6 +66,7 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     // TODO: update to jucx-1.8.0 and add an option of ODP registration
     val dataMemory = ucxShuffleManager.ucxNode.getContext.registerMemory(dataFileBuffer)
     fileMappings(shuffleId).add(dataMemory)
+    assume(indexBackFile.length() == UcxWorkerWrapper.LONG_SIZE * (lengths.size + 1))
 
     val offsetBuffer = UnsafeUtils.mmap(indexFileChannel, 0, indexBackFile.length())
     val offsetMemory = ucxShuffleManager.ucxNode.getContext.registerMemory(offsetBuffer)
@@ -95,9 +96,9 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     metadataBuffer.putLong(dataMemory.getAddress)
 
     metadataBuffer.putInt(offsetRkey.capacity())
-    metadataBuffer.putInt(fileMemoryRkey.capacity())
-
     metadataBuffer.put(offsetRkey)
+
+    metadataBuffer.putInt(fileMemoryRkey.capacity())
     metadataBuffer.put(fileMemoryRkey)
 
     metadataBuffer.clear()
@@ -109,12 +110,12 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
 
     val driverEndpoint = workerWrapper.driverEndpoint
     val request = driverEndpoint.putNonBlocking(UcxUtils.getAddress(metadataBuffer),
-      metadataBuffer.remaining(), driverOffset, driverMetadata.ucpRkey, null)
+      metadataBuffer.remaining(), driverOffset, driverMetadata.driverRkey, null)
 
-    workerWrapper.preconnnect()
+    workerWrapper.preconnect()
     // Blocking progress needed to make sure last mapper published data to driver before
     // reducer starts.
-    workerWrapper.progressRequest(request)
+    workerWrapper.waitRequest(request)
     memPool.put(metadataRegisteredMemory)
     logInfo(s"MapID: $mapId register files + publishing overhead: " +
       s"${Utils.getUsedTimeMs(startTime)}")

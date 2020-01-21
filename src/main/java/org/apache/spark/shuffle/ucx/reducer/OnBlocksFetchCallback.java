@@ -22,10 +22,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class OnBlocksFetchCallback extends ReducerCallback {
   protected RegisteredMemory blocksMemory;
-  protected long[] sizes;
-  private long startTime = System.currentTimeMillis();
+  protected int[] sizes;
 
-  public OnBlocksFetchCallback(ReducerCallback callback, RegisteredMemory blocksMemory, long[] sizes) {
+  public OnBlocksFetchCallback(ReducerCallback callback, RegisteredMemory blocksMemory, int[] sizes) {
     super(callback);
     this.blocksMemory = blocksMemory;
     this.sizes = sizes;
@@ -33,15 +32,19 @@ public class OnBlocksFetchCallback extends ReducerCallback {
 
   @Override
   public void onSuccess(UcxRequest request) {
-    logger.info("Fetched {} blocks of total size {} in {}", blockIds.length,
+    logger.info("Endpoint {} fetched {} blocks of total size {} in {}", endpoint.getNativeId(), blockIds.length,
       Utils.bytesToString(Arrays.stream(sizes).sum()), Utils.getUsedTimeMs(startTime));
     int position = 0;
     AtomicInteger refCount = new AtomicInteger(blockIds.length);
     for (int i = 0; i < blockIds.length; i++) {
       ShuffleBlockId block = blockIds[i];
-      blocksMemory.getBuffer().position(position).limit(position + (int) sizes[i]);
+      // Blocks are fetched to contiguous buffer.
+      // |----block1---||---block2---||---block3---|
+      // Slice each block to avoid buffer copy.
+      blocksMemory.getBuffer().position(position).limit(position + sizes[i]);
       ByteBuffer blockBuffer = blocksMemory.getBuffer().slice();
-      position += (int)sizes[i];
+      position += sizes[i];
+      // Pass block to Spark's ShuffleFetchIterator.
       listener.onBlockFetchSuccess(block.name(), new NioManagedBuffer(blockBuffer) {
         @Override
         public ManagedBuffer release() {

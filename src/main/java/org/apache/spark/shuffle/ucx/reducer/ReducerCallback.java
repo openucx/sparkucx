@@ -24,6 +24,7 @@ public abstract class ReducerCallback extends UcxCallback {
   protected UcxShuffleClient client;
   protected BlockFetchingListener listener;
   protected static final Logger logger = LoggerFactory.getLogger(ReducerCallback.class);
+  long startTime = System.currentTimeMillis();
 
   public ReducerCallback(ShuffleBlockId[] blockIds, UcpEndpoint endpoint,
                          UcxShuffleClient client, BlockFetchingListener listener) {
@@ -40,5 +41,6 @@ public abstract class ReducerCallback extends UcxCallback {
     this.endpoint = callback.endpoint;
     this.listener = callback.listener;
     this.mempool = callback.mempool;
+    this.startTime = callback.startTime;
   }
 }

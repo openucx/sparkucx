@@ -7,7 +7,6 @@ package org.apache.spark.shuffle.ucx.reducer;
 import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.ShuffleBlockId;
-import org.openucx.jucx.UcxException;
 import org.openucx.jucx.UcxRequest;
 import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.UcpEndpoint;
@@ -33,18 +32,17 @@ public class OnOffsetsFetchCallback extends ReducerCallback {
   public void onSuccess(UcxRequest request) {
     ByteBuffer resultOffset = offsetMemory.getBuffer();
     long totalSize = 0;
-    long[] sizes = new long[blockIds.length];
+    int[] sizes = new int[blockIds.length];
     for (int i = 0; i < blockIds.length; i++) {
       long blockOffset = resultOffset.getLong(i * 16);
       long blockLength = resultOffset.getLong(i * 16 + 8) - blockOffset;
-      sizes[i] = blockLength;
+      assert (blockLength > 0) && (blockLength < Integer.MAX_VALUE);
+      sizes[i] = (int) blockLength;
       totalSize += blockLength;
       dataAddresses[i] += blockOffset;
     }
 
-    if (totalSize <= 0 || totalSize >= Integer.MAX_VALUE) {
-      throw new UcxException("Total size: " + totalSize);
-    }
+    assert  (totalSize > 0) &&  (totalSize < Integer.MAX_VALUE);
     mempool.put(offsetMemory);
     RegisteredMemory blocksMemory = mempool.get((int) totalSize);
 

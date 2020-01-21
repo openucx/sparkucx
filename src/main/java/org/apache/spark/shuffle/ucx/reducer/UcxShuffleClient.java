@@ -9,6 +9,7 @@ import org.apache.spark.executor.TempShuffleReadMetrics;
 import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.network.shuffle.DownloadFileManager;
 import org.apache.spark.network.shuffle.ShuffleClient;
+import org.apache.spark.shuffle.DriverMetadata;
 import org.apache.spark.shuffle.ShuffleHandle;
 import org.apache.spark.shuffle.UcxShuffleManager;
 import org.apache.spark.shuffle.UcxWorkerWrapper;
@@ -20,12 +21,10 @@ import org.apache.spark.storage.ShuffleBlockId;
 import org.openucx.jucx.UcxUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.openucx.jucx.UcxException;
 import org.openucx.jucx.ucp.UcpEndpoint;
 import org.openucx.jucx.ucp.UcpRemoteKey;
 import scala.Option;
 
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
 
@@ -54,48 +53,24 @@ public class UcxShuffleClient extends ShuffleClient {
    */
   private void submitFetchOffsets(UcpEndpoint endpoint, ShuffleBlockId[] blockIds,
                                   long[] dataAddresses, RegisteredMemory offsetMemory) {
-    ByteBuffer driverMetadata =  workerWrapper.fetchDriverMetadataBuffer(handle.shuffleId()).data();
+    DriverMetadata driverMetadata =  workerWrapper.fetchDriverMetadataBuffer(handle.shuffleId());
     for (int i = 0; i < blockIds.length; i++) {
       ShuffleBlockId blockId = blockIds[i];
-      // Get block offset
-      int mapIdBlock = blockId.mapId() *
-        (int) ucxShuffleManager.ucxShuffleConf().metadataBlockSize();
-      int offsetWithinBlock = 0;
-      // Parse metadata fetched from driver.
-      long offsetAdress = driverMetadata.getLong(mapIdBlock + offsetWithinBlock);
-      offsetWithinBlock += 8;
-      long dataAddress = driverMetadata.getLong(mapIdBlock + offsetWithinBlock);
-      dataAddresses[i] = dataAddress;
-      offsetWithinBlock += 8;
 
-      // Unpack Rkeys for this workerWrapper
-      if (offsetRkeysCache.get(blockId.mapId()) == null ||
-        dataRkeysCache.get(blockId.mapId()) == null) {
-        int offsetRKeySize = driverMetadata.getInt(mapIdBlock + offsetWithinBlock);
-        offsetWithinBlock += 4;
-        int dataRkeySize = driverMetadata.getInt(mapIdBlock + offsetWithinBlock);
-        offsetWithinBlock += 4;
+      long offsetAddress = driverMetadata.offsetAddress(blockId.mapId());
+      dataAddresses[i] = driverMetadata.dataAddress(blockId.mapId());
 
-        if (offsetRKeySize <= 0 || dataRkeySize <= 0) {
-          throw new UcxException("Wrong rkey size.");
-        }
-        final ByteBuffer rkeyCopy = driverMetadata.slice();
-        rkeyCopy.position(mapIdBlock + offsetWithinBlock)
-          .limit(mapIdBlock + offsetWithinBlock + offsetRKeySize);
+      offsetRkeysCache.computeIfAbsent(blockId.mapId(), mapId ->
+        endpoint.unpackRemoteKey(driverMetadata.offsetRkey(blockId.mapId())));
 
-        offsetWithinBlock += offsetRKeySize;
-
-        offsetRkeysCache.computeIfAbsent(blockId.mapId(), mapId -> endpoint.unpackRemoteKey(rkeyCopy));
-
-        rkeyCopy.position(mapIdBlock + offsetWithinBlock)
-          .limit(mapIdBlock + offsetWithinBlock + dataRkeySize);
-
-        dataRkeysCache.computeIfAbsent(blockId.mapId(), mapId -> endpoint.unpackRemoteKey(rkeyCopy));
-      }
+      dataRkeysCache.computeIfAbsent(blockId.mapId(), mapId ->
+        endpoint.unpackRemoteKey(driverMetadata.dataRkey(blockId.mapId())));
 
       endpoint.getNonBlockingImplicit(
-        offsetAdress + blockId.reduceId() * 8L, offsetRkeysCache.get(blockId.mapId()),
-        UcxUtils.getAddress(offsetMemory.getBuffer()) + (i * 16), 16);
+        offsetAddress + blockId.reduceId() * UcxWorkerWrapper.LONG_SIZE(),
+          offsetRkeysCache.get(blockId.mapId()),
+        UcxUtils.getAddress(offsetMemory.getBuffer()) + (i * 2 * UcxWorkerWrapper.LONG_SIZE()),
+        2 * UcxWorkerWrapper.LONG_SIZE());
     }
   }
 
@@ -115,7 +90,8 @@ public class UcxShuffleClient extends ShuffleClient {
 
     long[] dataAddresses = new long[blockIds.length];
 
-    RegisteredMemory offsetMemory = mempool.get(16 * blockIds.length);
+    // Need to fetch 2 long offsets current block + next block to calculate exact block size.
+    RegisteredMemory offsetMemory = mempool.get(2 * UcxWorkerWrapper.LONG_SIZE() * blockIds.length);
 
     ShuffleBlockId[] shuffleBlockIds = Arrays.stream(blockIds)
       .map(blockId -> (ShuffleBlockId)BlockId$.MODULE$.apply(blockId)).toArray(ShuffleBlockId[]::new);

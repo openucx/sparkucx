@@ -50,7 +50,7 @@ See file LICENSE for terms.
   </dependencies>
 
   <build>
-    <finalName>${project.artifactId}-${project.version}-for-spark-${spark.version}</finalName>
+    <finalName>${project.artifactId}-${project.version}-for-spark-2.4</finalName>
     <plugins>
       <plugin>
         <groupId>net.alchim31.maven</groupId>
