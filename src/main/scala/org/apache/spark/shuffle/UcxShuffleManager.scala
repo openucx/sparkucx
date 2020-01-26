@@ -73,7 +73,7 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
     val driverMemory = new UcxRemoteMemory(metadataMemory.getAddress,
       metadataMemory.getRemoteKeyBuffer)
 
-    if (SortShuffleWriter.shouldBypassMergeSort(conf, dependency)) {
+    val handle: ShuffleHandle = if (SortShuffleWriter.shouldBypassMergeSort(conf, dependency)) {
       // If there are fewer than spark.shuffle.sort.bypassMergeThreshold partitions and we don't
       // need map-side aggregation, then write numPartitions files directly and just concatenate
       // them at the end. This avoids doing serialization and deserialization twice to merge
@@ -89,6 +89,9 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
       // Otherwise, buffer map outputs in a deserialized form:
       new UcxBaseShuffleHandle(driverMemory, shuffleId, numMaps, dependency)
     }
+
+    shuffleIdToHandle.putIfAbsent(shuffleId, handle)
+    handle
   }
 
   /**
@@ -109,12 +112,15 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
   override def getReader[K, C](handle: ShuffleHandle, startPartition: Int,
                                endPartition: Int, context: TaskContext): ShuffleReader[K, C] = {
     startUcxNodeIfMissing()
-    super.getReader(handle, startPartition, endPartition, context)
+    shuffleIdToHandle.putIfAbsent(handle.shuffleId, handle)
+    new UcxShuffleReader(handle.asInstanceOf[BaseShuffleHandle[K, _, C]], startPartition,
+      endPartition, context)
   }
 
 
   override def unregisterShuffle(shuffleId: Int): Boolean = {
     shuffleIdToMetadataBuffer.remove(shuffleId).foreach(_.deregister())
+    shuffleBlockResolver.removeShuffle(shuffleId)
     super.unregisterShuffle(shuffleId)
   }
 
@@ -123,8 +129,8 @@ class UcxShuffleManager(val conf: SparkConf, isDriver: Boolean) extends SortShuf
    */
   override def stop(): Unit = synchronized {
     logInfo("Stopping shuffle manager")
-    shuffleIdToMetadataBuffer.values.foreach(_.deregister())
-    shuffleIdToMetadataBuffer.clear()
+    shuffleIdToHandle.keys.foreach(unregisterShuffle)
+    shuffleIdToHandle.clear()
     if (ucxNode != null) {
       ucxNode.close()
       ucxNode = null

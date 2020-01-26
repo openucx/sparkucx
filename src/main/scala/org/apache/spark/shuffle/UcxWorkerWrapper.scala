@@ -7,9 +7,9 @@ package org.apache.spark.shuffle
 import java.io.Closeable
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
+import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 
 import scala.collection.JavaConverters._
-
 import scala.collection.mutable
 
 import org.openucx.jucx.{UcxException, UcxRequest}
@@ -17,49 +17,102 @@ import org.openucx.jucx.ucp.{UcpEndpoint, UcpEndpointParams, UcpRemoteKey, UcpWo
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.UcxNode
-import org.apache.spark.storage.{BlockManager, BlockManagerId}
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 /**
  * Driver metadata buffer information that holds unpacked RkeyBuffer for this WorkerWrapper
  * and fetched buffer itself.
  */
-case class DriverMetadaBuffer(address: Long, ucpRkey: UcpRemoteKey, var length: Int,
-                              var data: ByteBuffer)
+case class DriverMetadata(address: Long, driverRkey: UcpRemoteKey, length: Int,
+                          var data: ByteBuffer) {
+  // Driver metadata is an array of blocks:
+  // | mapId0 | mapId1 | mapId2 | mapId3 | mapId4 | mapId5 |
+  // Each block in driver metadata has next layout:
+  // |offsetAddress|dataAddress|offsetRkeySize|offsetRkey|dataRkeySize|dataRkey|
+
+  def offsetAddress(mapId: Int): Long = {
+    val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
+    data.getLong(mapIdBlock)
+  }
+
+  def dataAddress(mapId: Int): Long = {
+    val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
+    data.getLong(mapIdBlock + UcxWorkerWrapper.LONG_SIZE)
+  }
+
+  def offsetRkey(mapId: Int): ByteBuffer = {
+    val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
+    var offsetWithinBlock = mapIdBlock + 2 * UcxWorkerWrapper.LONG_SIZE
+    val rkeySize = data.getInt(offsetWithinBlock)
+    offsetWithinBlock += UcxWorkerWrapper.INT_SIZE
+    val result = data.duplicate()
+    result.position(offsetWithinBlock).limit(offsetWithinBlock + rkeySize)
+    result.slice()
+  }
+
+  def dataRkey(mapId: Int): ByteBuffer = {
+    val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
+    var offsetWithinBlock = mapIdBlock + 2 * UcxWorkerWrapper.LONG_SIZE
+    val offsetRkeySize = data.getInt(offsetWithinBlock)
+    offsetWithinBlock += UcxWorkerWrapper.INT_SIZE + offsetRkeySize
+    val dataRkeySize = data.getInt(offsetWithinBlock)
+    offsetWithinBlock += UcxWorkerWrapper.INT_SIZE
+    val result = data.duplicate()
+    result.position(offsetWithinBlock).limit(offsetWithinBlock + dataRkeySize)
+    result.slice()
+  }
+}
 
 /**
  * Worker per thread wrapper, that maintains connection and progress logic.
  */
 class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: Int)
   extends Closeable with Logging {
-  type ShuffleId = Int
-  type MapId = Int
+  import UcxWorkerWrapper._
 
   private final val driverSocketAddress = new InetSocketAddress(conf.driverHost, conf.driverPort)
   private final val endpointParams = new UcpEndpointParams().setSocketAddress(driverSocketAddress)
     .setPeerErrorHadnlingMode()
   val driverEndpoint: UcpEndpoint = worker.newEndpoint(endpointParams)
 
-  val blockManager: BlockManager = SparkEnv.get.blockManager
-
   private final val connections = mutable.Map.empty[BlockManagerId, UcpEndpoint]
 
-  private final val driverMetadataBuffer = mutable.Map.empty[ShuffleId, DriverMetadaBuffer]
+  private final val driverMetadata = mutable.Map.empty[ShuffleId, DriverMetadata]
 
   override def close(): Unit = {
+    driverMetadata.values.foreach{
+      case DriverMetadata(address, rkey, length, data) => rkey.close()
+    }
+    driverMetadata.clear()
     driverEndpoint.close()
+    connections.foreach{
+      case (_, endpoint) => endpoint.close()
+    }
+    connections.clear()
     worker.close()
+    driverMetadataBuffer.clear()
   }
 
   /**
-   * Progress single request until it's not completed.
+   * Blocking progress single request until it's not completed.
    */
-  def progressRequest(request: UcxRequest): Unit = {
+  def waitRequest(request: UcxRequest): Unit = {
     val startTime = System.currentTimeMillis()
     while (!request.isCompleted) {
       progress()
     }
     logDebug(s"Request completed in ${Utils.getUsedTimeMs(startTime)}")
+  }
+
+  /**
+   * Blocking progress while result queue is empty.
+   */
+  def fillQueueWithBlocks(queue: LinkedBlockingQueue[_]): Unit = {
+    while (queue.isEmpty) {
+      progress()
+    }
   }
 
   /**
@@ -72,7 +125,7 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
   /**
    * Establish connections to known instances.
    */
-  def preconnnect(): Unit = {
+  def preconnect(): Unit = {
     UcxNode.getWorkerAddresses.keySet().asScala.foreach(getConnection)
   }
 
@@ -105,8 +158,8 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
    * Unpacks driver metadata RkeyBuffer for this worker.
    * Needed to perform PUT operation to publish map output info.
    */
-  def getDriverMetadataBuffer(shuffleId: ShuffleId): DriverMetadaBuffer = {
-    driverMetadataBuffer.getOrElseUpdate(shuffleId, {
+  def getDriverMetadata(shuffleId: ShuffleId): DriverMetadata = {
+    driverMetadata.getOrElseUpdate(shuffleId, {
       val handle = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
         .shuffleIdToHandle(shuffleId)
       val (address, length, rkey): (Long, Int, ByteBuffer) =
@@ -128,7 +181,45 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
         }
       rkey.clear()
       val unpackedRkey = driverEndpoint.unpackRemoteKey(rkey)
-      DriverMetadaBuffer(address, unpackedRkey, length, null)
+      DriverMetadata(address, unpackedRkey, length, null)
     })
   }
+
+  /**
+   * Fetches using ucp_get metadata buffer from driver, with all needed information
+   * for offset and data addresses and keys.
+   */
+  def fetchDriverMetadataBuffer(shuffleId: ShuffleId): DriverMetadata = {
+    val handle = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
+      .shuffleIdToHandle(shuffleId)
+
+    val metadata = getDriverMetadata(handle.shuffleId)
+
+    UcxWorkerWrapper.driverMetadataBuffer.computeIfAbsent(shuffleId,
+      (t: ShuffleId) => {
+        val buffer = Platform.allocateDirectBuffer(metadata.length)
+        val request = driverEndpoint.getNonBlocking(
+          metadata.address, metadata.driverRkey, buffer, null)
+        waitRequest(request)
+        buffer
+      }
+    )
+
+    if (metadata.data == null) {
+      metadata.data =  UcxWorkerWrapper.driverMetadataBuffer.get(shuffleId)
+    }
+    metadata
+  }
+}
+
+object UcxWorkerWrapper {
+  type ShuffleId = Int
+  type MapId = Int
+  val LONG_SIZE = 8
+  val INT_SIZE = 4
+  // Driver metadata buffer, to fetch by first worker wrapper.
+  val driverMetadataBuffer = new ConcurrentHashMap[ShuffleId, ByteBuffer]()
+
+  val metadataBlockSize =
+    SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager].ucxShuffleConf.metadataBlockSize.toInt
 }

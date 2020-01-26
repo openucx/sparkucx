@@ -116,7 +116,6 @@ public class UcxNode implements Closeable {
 
     RegisteredMemory metadataMemory = memoryPool.get(conf.metadataRPCBufferSize());
     ByteBuffer metadataBuffer = metadataMemory.getBuffer();
-    metadataBuffer.order(ByteOrder.nativeOrder());
     metadataBuffer.putInt(workerAddresss.capacity());
     metadataBuffer.put(workerAddresss);
     try {
@@ -186,7 +185,10 @@ public class UcxNode implements Closeable {
   }
 
   private void stopExecutor() {
-    globalDriverEndpoint.close();
+    if (globalDriverEndpoint != null) {
+      globalDriverEndpoint.close();
+      globalDriverEndpoint = null;
+    }
     allocatedWorkers.forEach(UcxWorkerWrapper::close);
     allocatedWorkers.clear();
   }

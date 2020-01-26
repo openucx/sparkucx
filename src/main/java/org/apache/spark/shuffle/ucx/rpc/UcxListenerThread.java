@@ -10,7 +10,6 @@ import org.openucx.jucx.UcxRequest;
 import org.openucx.jucx.ucp.UcpWorker;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 
 /**
  * Thread for progressing global worker for connection establishment and RPC exchange.
@@ -35,7 +34,6 @@ public class UcxListenerThread extends Thread implements Runnable {
   private UcxRequest recvRequest() {
     ByteBuffer metadataBuffer = Platform.allocateDirectBuffer(
       ucxNode.getConf().metadataRPCBufferSize());
-    metadataBuffer.order(ByteOrder.nativeOrder());
     RpcConnectionCallback callback = new RpcConnectionCallback(metadataBuffer, isDriver, ucxNode);
     return globalWorker.recvTaggedNonBlocking(metadataBuffer, callback);
   }
