@@ -6,7 +6,7 @@ package org.apache.spark.shuffle.ucx.rpc;
 
 import org.apache.spark.shuffle.ucx.UcxNode;
 import org.apache.spark.unsafe.Platform;
-import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.ucp.UcpRequest;
 import org.openucx.jucx.ucp.UcpWorker;
 
 import java.nio.ByteBuffer;
@@ -31,7 +31,7 @@ public class UcxListenerThread extends Thread implements Runnable {
    * 2. Both Driver and Executor. Accept Recv request.
    * If on driver broadcast it to other executors. On executor just save worker addresses.
    */
-  private UcxRequest recvRequest() {
+  private UcpRequest recvRequest() {
     ByteBuffer metadataBuffer = Platform.allocateDirectBuffer(
       ucxNode.getConf().metadataRPCBufferSize());
     RpcConnectionCallback callback = new RpcConnectionCallback(metadataBuffer, isDriver, ucxNode);
@@ -40,16 +40,17 @@ public class UcxListenerThread extends Thread implements Runnable {
 
   @Override
   public void run() {
-    UcxRequest recv = recvRequest();
+    UcpRequest recv = recvRequest();
     while (!isInterrupted()) {
       if (recv.isCompleted()) {
         // Process 1 recv request at a time.
-        // TODO: cancel this request at exit when would be implemented.
         recv = recvRequest();
       }
       if (globalWorker.progress() == 0) {
         globalWorker.waitForEvents();
       }
     }
+    globalWorker.cancelRequest(recv);
+    recv.close();
   }
 }

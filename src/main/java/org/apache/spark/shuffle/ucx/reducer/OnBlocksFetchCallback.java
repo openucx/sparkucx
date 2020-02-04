@@ -10,7 +10,7 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.ShuffleBlockId;
 import org.apache.spark.util.Utils;
-import org.openucx.jucx.UcxRequest;
+import org.openucx.jucx.ucp.UcpRequest;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -31,7 +31,7 @@ public class OnBlocksFetchCallback extends ReducerCallback {
   }
 
   @Override
-  public void onSuccess(UcxRequest request) {
+  public void onSuccess(UcpRequest request) {
     logger.info("Endpoint {} fetched {} blocks of total size {} in {}", endpoint.getNativeId(), blockIds.length,
       Utils.bytesToString(Arrays.stream(sizes).sum()), Utils.getUsedTimeMs(startTime));
     int position = 0;

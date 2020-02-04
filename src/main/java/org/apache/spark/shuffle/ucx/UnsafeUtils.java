@@ -4,6 +4,7 @@
  */
 package org.apache.spark.shuffle.ucx;
 
+import org.openucx.jucx.UcxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.nio.ch.FileChannelImpl;
@@ -41,14 +42,15 @@ public class UnsafeUtils {
 
   private UnsafeUtils() {}
 
-  public static ByteBuffer mmap(FileChannel fileChannel, long offset, long length) {
+  public static long mmap(FileChannel fileChannel, long offset, long length) {
+    long result;
     try {
-      long mapAddress = (long)mmap.invoke(fileChannel, 1, offset, length);
-      return getByteBuffer(mapAddress, (int)length);
-    } catch (IllegalAccessException | InvocationTargetException | IOException e) {
+      result = (long)mmap.invoke(fileChannel, 1, offset, length);
+    } catch (Exception e) {
       logger.error("MMap({}, {}) failed: {}", offset, length, e.getMessage());
+      throw new UcxException(e.getMessage());
     }
-    return null;
+    return result;
   }
 
   public static void munmap(long address, long length) {
@@ -59,14 +61,14 @@ public class UnsafeUtils {
     }
   }
 
-  private static ByteBuffer getByteBuffer(long address, int length) throws IOException {
+  public static ByteBuffer getByteBuffer(long address, int length) throws IOException {
     try {
       return (ByteBuffer)directBufferConstructor.newInstance(address, length);
     } catch (InvocationTargetException ex) {
       throw new IOException("java.nio.DirectByteBuffer: " +
         "InvocationTargetException: " + ex.getTargetException());
     } catch (Exception e) {
-      throw new IOException("java.nio.DirectByteBuffer exception: " + e.toString());
+      throw new IOException("java.nio.DirectByteBuffer exception: " + e.getMessage());
     }
   }
 }

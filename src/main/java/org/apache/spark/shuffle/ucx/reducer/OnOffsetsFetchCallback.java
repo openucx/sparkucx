@@ -7,9 +7,9 @@ package org.apache.spark.shuffle.ucx.reducer;
 import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.ShuffleBlockId;
-import org.openucx.jucx.UcxRequest;
 import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.UcpEndpoint;
+import org.openucx.jucx.ucp.UcpRequest;
 
 import java.nio.ByteBuffer;
 
@@ -29,7 +29,7 @@ public class OnOffsetsFetchCallback extends ReducerCallback {
   }
 
   @Override
-  public void onSuccess(UcxRequest request) {
+  public void onSuccess(UcpRequest request) {
     ByteBuffer resultOffset = offsetMemory.getBuffer();
     long totalSize = 0;
     int[] sizes = new int[blockIds.length];

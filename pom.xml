@@ -45,7 +45,7 @@ See file LICENSE for terms.
     <dependency>
       <groupId>org.openucx</groupId>
       <artifactId>jucx</artifactId>
-      <version>1.7.0</version>
+      <version>1.8.0-SNAPSHOT</version>
     </dependency>
   </dependencies>
 
@@ -105,10 +105,10 @@ See file LICENSE for terms.
 
   <repositories>
     <repository>
-      <id>Maven</id>
-      <url>https://pkgs.dev.azure.com/ucfconsort/sparkucx/_packaging/Maven/maven/v1</url>
+      <id>oss.sonatype.org-snapshot</id>
+      <url>http://oss.sonatype.org/content/repositories/snapshots</url>
       <releases>
-        <enabled>true</enabled>
+        <enabled>false</enabled>
       </releases>
       <snapshots>
         <enabled>true</enabled>
@@ -116,16 +116,4 @@ See file LICENSE for terms.
     </repository>
   </repositories>
 
-  <distributionManagement>
-    <repository>
-      <id>Maven</id>
-      <url>https://pkgs.dev.azure.com/ucfconsort/sparkucx/_packaging/Maven/maven/v1</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </repository>
-  </distributionManagement>
 </project>

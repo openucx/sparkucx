@@ -85,4 +85,6 @@ class UcxShuffleConf(conf: SparkConf) extends SparkConf {
     .booleanConf.createWithDefault(true)
 
   lazy val preregisterMemory: Boolean = conf.getBoolean(PREREGISTER_MEMORY.key, PREREGISTER_MEMORY.defaultValue.get)
+
+  lazy val useOdp: Boolean = conf.getBoolean(getUcxConf("memory.useOdp"), false)
 }
