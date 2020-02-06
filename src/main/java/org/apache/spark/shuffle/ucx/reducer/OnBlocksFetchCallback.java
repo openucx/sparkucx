@@ -8,12 +8,11 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
-import org.apache.spark.storage.ShuffleBlockId;
+import org.apache.spark.storage.BlockId;
 import org.apache.spark.util.Utils;
 import org.openucx.jucx.ucp.UcpRequest;
 
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -32,12 +31,10 @@ public class OnBlocksFetchCallback extends ReducerCallback {
 
   @Override
   public void onSuccess(UcpRequest request) {
-    logger.info("Endpoint {} fetched {} blocks of total size {} in {}", endpoint.getNativeId(), blockIds.length,
-      Utils.bytesToString(Arrays.stream(sizes).sum()), Utils.getUsedTimeMs(startTime));
     int position = 0;
     AtomicInteger refCount = new AtomicInteger(blockIds.length);
     for (int i = 0; i < blockIds.length; i++) {
-      ShuffleBlockId block = blockIds[i];
+      BlockId block = blockIds[i];
       // Blocks are fetched to contiguous buffer.
       // |----block1---||---block2---||---block3---|
       // Slice each block to avoid buffer copy.
@@ -55,5 +52,7 @@ public class OnBlocksFetchCallback extends ReducerCallback {
         }
       });
     }
+    logger.info("Endpoint {} fetched {} blocks of total size {} in {}ms", endpoint.getNativeId(), blockIds.length,
+      Utils.bytesToString(position), System.currentTimeMillis() - startTime);
   }
 }

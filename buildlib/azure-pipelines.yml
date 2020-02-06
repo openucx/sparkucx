@@ -11,6 +11,15 @@ stages:
   - stage: Build
     jobs:
       - job: build
+        strategy:
+          maxParallel: 1
+          matrix:
+            spark-2.4:
+              profile_version: "2.4"
+              spark_version: "2.4.5"
+            spark-3.0:
+              profile_version: "3.0"
+              spark_version: "3.0.0p2"
         pool:
           name: MLNX
           demands: Maven
@@ -21,21 +30,20 @@ stages:
               jdkVersionOption: "1.8"
               publishJUnitResults: false
               goals: "package"
-              options: "-B -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn"
+              options: "-B  -Dmaven.repo.local=$(System.DefaultWorkingDirectory)/target/.deps -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -Pspark-$(profile_version)"
           - bash: |
-              set -x
+              set -xeE
+              module load tools/spark-$(spark_version)
               source buildlib/test.sh
 
               if [[ $(get_rdma_device_iface) != "" ]]
               then
-                export SPARK_UCX_JAR=$(System.DefaultWorkingDirectory)/target/spark-ucx-1.0-for-spark-2.4-jar-with-dependencies.jar
+                export SPARK_UCX_JAR=$(System.DefaultWorkingDirectory)/target/spark-ucx-1.0-for-spark-$(profile_version)-jar-with-dependencies.jar
                 export SPARK_LOCAL_DIRS=$(System.DefaultWorkingDirectory)/target/spark
+                export SPARK_VERSION=$(spark_version)
                 cd $(System.DefaultWorkingDirectory)/target/
-                if [[ -d /hpc/local/oss/spark/spark-2.4.4-bin-hadoop2.7 ]]
-                then
-                        export SPARK_HOME=/hpc/local/oss/spark/spark-2.4.4-bin-hadoop2.7
-                fi
                 run_tests
               else
                 echo ##vso[task.complete result=Skipped;]No IB devices found
               fi
+            displayName: Run spark tests
