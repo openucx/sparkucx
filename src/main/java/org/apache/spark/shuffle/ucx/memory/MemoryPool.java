@@ -5,8 +5,11 @@
 package org.apache.spark.shuffle.ucx.memory;
 
 import org.apache.spark.shuffle.UcxShuffleConf;
-import org.apache.spark.unsafe.Platform;
+import org.apache.spark.shuffle.ucx.UnsafeUtils;
+import org.openucx.jucx.UcxException;
+import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.UcpContext;
+import org.openucx.jucx.ucp.UcpMemMapParams;
 import org.openucx.jucx.ucp.UcpMemory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,8 +63,14 @@ public class MemoryPool implements Closeable {
             result.getRefCount().incrementAndGet();
           }
         } else {
-          ByteBuffer buffer = malloc(length);
-          UcpMemory memory = register(buffer);
+          UcpMemMapParams memMapParams = new UcpMemMapParams().setLength(length).allocate();
+          UcpMemory memory = context.memoryMap(memMapParams);
+          ByteBuffer buffer;
+          try {
+            buffer = UcxUtils.getByteBufferView(memory.getAddress(), (int)memory.getLength());
+          } catch (Exception e) {
+            throw new UcxException(e.getMessage());
+          }
           result = new RegisteredMemory(new AtomicInteger(1), memory, buffer);
           totalAlloc.incrementAndGet();
         }
@@ -77,18 +86,6 @@ public class MemoryPool implements Closeable {
       stack.addLast(registeredMemory);
     }
 
-    private ByteBuffer malloc(int size) {
-      return Platform.allocateDirectBuffer(size);
-    }
-
-    private UcpMemory register(ByteBuffer buffer) {
-      UcpMemory memory = null;
-      if (conf.preregisterMemory()) {
-        memory = context.registerMemory(buffer);
-      }
-      return memory;
-    }
-
     private void preallocate(int numBuffers) {
       // Platform.allocateDirectBuffer supports only 2GB of buffer.
       // Decrease number of buffers if total size of preAllocation > 2GB.
@@ -96,8 +93,15 @@ public class MemoryPool implements Closeable {
         numBuffers = Integer.MAX_VALUE / length;
       }
 
-      ByteBuffer buffer = malloc(numBuffers * length);
-      UcpMemory memory = register(buffer);
+      UcpMemMapParams memMapParams = new UcpMemMapParams().allocate().setLength(numBuffers * (long)length);
+      UcpMemory memory = context.memoryMap(memMapParams);
+      ByteBuffer buffer;
+      try {
+        buffer = UnsafeUtils.getByteBuffer(memory.getAddress(), numBuffers * length);
+      } catch (Exception ex) {
+        throw new UcxException(ex.getMessage());
+      }
+
       AtomicInteger refCount = new AtomicInteger(numBuffers);
       for (int i = 0; i < numBuffers; i++) {
         buffer.position(i * length).limit(i * length + length);

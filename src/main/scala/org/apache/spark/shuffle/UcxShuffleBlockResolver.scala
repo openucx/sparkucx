@@ -10,7 +10,7 @@ import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArrayList}
 import scala.collection.JavaConverters._
 
 import org.openucx.jucx.UcxUtils
-import org.openucx.jucx.ucp.UcpMemory
+import org.openucx.jucx.ucp.{UcpMemMapParams, UcpMemory}
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
 import org.apache.spark.shuffle.ucx.UnsafeUtils
@@ -62,14 +62,19 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
     val dataFileChannel = dataBackFile.getChannel
 
     // Memory map and register data and index file.
-    val dataFileBuffer = UnsafeUtils.mmap(dataFileChannel, 0, dataBackFile.length())
-    // TODO: update to jucx-1.8.0 and add an option of ODP registration
-    val dataMemory = ucxShuffleManager.ucxNode.getContext.registerMemory(dataFileBuffer)
+    val dataAddress = UnsafeUtils.mmap(dataFileChannel, 0, dataBackFile.length())
+    val memMapParams = new UcpMemMapParams().setAddress(dataAddress)
+      .setLength(dataBackFile.length())
+    if (ucxShuffleManager.ucxShuffleConf.useOdp) {
+      memMapParams.nonBlocking()
+    }
+    val dataMemory = ucxShuffleManager.ucxNode.getContext.memoryMap(memMapParams)
     fileMappings(shuffleId).add(dataMemory)
     assume(indexBackFile.length() == UcxWorkerWrapper.LONG_SIZE * (lengths.size + 1))
 
-    val offsetBuffer = UnsafeUtils.mmap(indexFileChannel, 0, indexBackFile.length())
-    val offsetMemory = ucxShuffleManager.ucxNode.getContext.registerMemory(offsetBuffer)
+    val offsetAddress = UnsafeUtils.mmap(indexFileChannel, 0, indexBackFile.length())
+    memMapParams.setAddress(offsetAddress).setLength(indexBackFile.length())
+    val offsetMemory = ucxShuffleManager.ucxNode.getContext.memoryMap(memMapParams)
     offsetMappings(shuffleId).add(offsetMemory)
 
     dataFileChannel.close()
@@ -123,7 +128,7 @@ class UcxShuffleBlockResolver(ucxShuffleManager: UcxShuffleManager)
 
   private def unregisterAndUnmap(mem: UcpMemory): Unit = {
     val address = mem.getAddress
-    val length = mem.getData.capacity()
+    val length = mem.getLength
     mem.deregister()
     UnsafeUtils.munmap(address, length)
   }

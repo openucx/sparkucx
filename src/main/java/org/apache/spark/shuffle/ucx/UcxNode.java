@@ -14,14 +14,12 @@ import org.apache.spark.shuffle.ucx.rpc.UcxListenerThread;
 import org.apache.spark.storage.BlockManagerId;
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxException;
-import org.openucx.jucx.UcxRequest;
 import org.openucx.jucx.ucp.*;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -140,7 +138,7 @@ public class UcxNode implements Closeable {
     // TODO: send using stream API when it would be available in jucx.
     globalDriverEndpoint.sendTaggedNonBlocking(metadataMemory.getBuffer(), new UcxCallback() {
       @Override
-      public void onSuccess(UcxRequest request) {
+      public void onSuccess(UcpRequest request) {
         memoryPool.put(metadataMemory);
       }
     });

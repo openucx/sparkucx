@@ -9,9 +9,9 @@ import org.apache.spark.storage.BlockManagerId;
 import org.apache.spark.unsafe.Platform;
 import org.openucx.jucx.UcxCallback;
 import org.openucx.jucx.UcxException;
-import org.openucx.jucx.UcxRequest;
 import org.openucx.jucx.ucp.UcpEndpoint;
 import org.openucx.jucx.ucp.UcpEndpointParams;
+import org.openucx.jucx.ucp.UcpRequest;
 import org.openucx.jucx.ucp.UcpWorker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -44,7 +44,7 @@ public class RpcConnectionCallback extends UcxCallback {
   }
 
   @Override
-  public void onSuccess(UcxRequest request) {
+  public void onSuccess(UcpRequest request) {
     int workerAddressSize = metadataBuffer.getInt();
     ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
 
@@ -85,6 +85,15 @@ public class RpcConnectionCallback extends UcxCallback {
     workerAdresses.put(blockManagerId, workerAddress);
     synchronized (workerAdresses) {
       workerAdresses.notifyAll();
+    }
+  }
+
+  @Override
+  public void onError(int ucsStatus, String errorMsg) {
+    // UCS_ERR_CANCELED = -16,
+    if (ucsStatus != -16) {
+      logger.error("Request error: {}", errorMsg);
+      throw new UcxException(errorMsg);
     }
   }
 }

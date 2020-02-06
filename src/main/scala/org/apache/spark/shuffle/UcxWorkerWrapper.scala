@@ -12,8 +12,8 @@ import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.openucx.jucx.{UcxException, UcxRequest}
-import org.openucx.jucx.ucp.{UcpEndpoint, UcpEndpointParams, UcpRemoteKey, UcpWorker}
+import org.openucx.jucx.UcxException
+import org.openucx.jucx.ucp.{UcpEndpoint, UcpEndpointParams, UcpRemoteKey, UcpRequest, UcpWorker}
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.UcxNode
@@ -98,11 +98,9 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
   /**
    * Blocking progress single request until it's not completed.
    */
-  def waitRequest(request: UcxRequest): Unit = {
+  def waitRequest(request: UcpRequest): Unit = {
     val startTime = System.currentTimeMillis()
-    while (!request.isCompleted) {
-      progress()
-    }
+    worker.progressRequest(request)
     logDebug(s"Request completed in ${Utils.getUsedTimeMs(startTime)}")
   }
 
