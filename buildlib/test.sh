@@ -53,7 +53,7 @@ SPARK_HOME=${SPARK_HOME:=$PWD/spark}
 
 SPARK_VERSION=${SPARK_VERSION:="2.4.4"}
 
-UCX_BRANCH=${UCX_BRANCH:="v1.7.x"}
+UCX_BRANCH=${UCX_BRANCH:="master"}
 
 export SPARK_MASTER_HOST=${SPARK_MASTER_HOST:=$(hostname -f)}
 export SPARK_MASTER_PORT=${SPARK_MASTER_PORT:=$(( 2000 + 10 * ${EXECUTOR_NUMBER}))}
@@ -119,6 +119,7 @@ setup_configuration() {
 
     cat <<-EOF > ${SPARK_CONF_DIR}/spark-defaults.conf
 	spark.shuffle.manager org.apache.spark.shuffle.UcxShuffleManager
+	spark.shuffle.readHostLocalDisk.enabled false
 	spark.driver.extraClassPath ${SPARK_UCX_JAR}:${UCX_LIB}
 	spark.executor.extraClassPath ${SPARK_UCX_JAR}:${UCX_LIB}
 	spark.shuffle.ucx.driver.port $(( ${SPARK_MASTER_PORT} + 1 ))

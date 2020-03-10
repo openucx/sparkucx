@@ -2,16 +2,20 @@
  * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
-package org.apache.spark.shuffle.ucx.reducer;
+package org.apache.spark.shuffle.ucx.reducer.compat.spark_2_4;
 
 import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
+import org.apache.spark.shuffle.ucx.reducer.OnBlocksFetchCallback;
+import org.apache.spark.shuffle.ucx.reducer.ReducerCallback;
 import org.apache.spark.storage.ShuffleBlockId;
 import org.openucx.jucx.UcxUtils;
 import org.openucx.jucx.ucp.UcpEndpoint;
+import org.openucx.jucx.ucp.UcpRemoteKey;
 import org.openucx.jucx.ucp.UcpRequest;
 
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 /**
  * Callback, called when got all offsets for blocks
@@ -19,13 +23,15 @@ import java.nio.ByteBuffer;
 public class OnOffsetsFetchCallback extends ReducerCallback {
   private final RegisteredMemory offsetMemory;
   private final long[] dataAddresses;
+  private Map<Integer, UcpRemoteKey> dataRkeysCache;
 
-  public OnOffsetsFetchCallback(ShuffleBlockId[] blockIds, UcpEndpoint endpoint,
-                                UcxShuffleClient client, BlockFetchingListener listener,
-                                RegisteredMemory offsetMemory, long[] dataAddresses) {
-    super(blockIds, endpoint, client, listener);
+  public OnOffsetsFetchCallback(ShuffleBlockId[] blockIds, UcpEndpoint endpoint, BlockFetchingListener listener,
+                                RegisteredMemory offsetMemory, long[] dataAddresses,
+                                Map<Integer, UcpRemoteKey> dataRkeysCache) {
+    super(blockIds, endpoint, listener);
     this.offsetMemory = offsetMemory;
     this.dataAddresses = dataAddresses;
+    this.dataRkeysCache = dataRkeysCache;
   }
 
   @Override
@@ -49,7 +55,7 @@ public class OnOffsetsFetchCallback extends ReducerCallback {
     long offset = 0;
     // Submits N fetch blocks requests
     for (int i = 0; i < blockIds.length; i++) {
-      endpoint.getNonBlockingImplicit(dataAddresses[i], client.dataRkeysCache.get(blockIds[i].mapId()),
+      endpoint.getNonBlockingImplicit(dataAddresses[i], dataRkeysCache.get(((ShuffleBlockId)blockIds[i]).mapId()),
         UcxUtils.getAddress(blocksMemory.getBuffer()) + offset, sizes[i]);
       offset += sizes[i];
     }

@@ -2,20 +2,17 @@
  * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
  * See file LICENSE for terms.
  */
-package org.apache.spark.shuffle.ucx.reducer;
+package org.apache.spark.shuffle.ucx.reducer.compat.spark_2_4;
 
 import org.apache.spark.SparkEnv;
 import org.apache.spark.executor.TempShuffleReadMetrics;
 import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.network.shuffle.DownloadFileManager;
 import org.apache.spark.network.shuffle.ShuffleClient;
-import org.apache.spark.shuffle.DriverMetadata;
-import org.apache.spark.shuffle.ShuffleHandle;
-import org.apache.spark.shuffle.UcxShuffleManager;
-import org.apache.spark.shuffle.UcxWorkerWrapper;
+import org.apache.spark.shuffle.*;
 import org.apache.spark.shuffle.ucx.memory.MemoryPool;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
-import org.apache.spark.storage.BlockId$;
+import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.BlockManagerId;
 import org.apache.spark.storage.ShuffleBlockId;
 import org.openucx.jucx.UcxUtils;
@@ -32,18 +29,15 @@ public class UcxShuffleClient extends ShuffleClient {
   private final MemoryPool mempool;
   private static final Logger logger = LoggerFactory.getLogger(UcxShuffleClient.class);
   private final UcxShuffleManager ucxShuffleManager;
-  private final ShuffleHandle handle;
   private final TempShuffleReadMetrics shuffleReadMetrics;
   private final UcxWorkerWrapper workerWrapper;
   final HashMap<Integer, UcpRemoteKey> offsetRkeysCache = new HashMap<>();
   final HashMap<Integer, UcpRemoteKey> dataRkeysCache = new HashMap<>();
 
-  public UcxShuffleClient(ShuffleHandle handle,
-                          TempShuffleReadMetrics shuffleReadMetrics,
+  public UcxShuffleClient(TempShuffleReadMetrics shuffleReadMetrics,
                           UcxWorkerWrapper workerWrapper) {
     this.ucxShuffleManager = (UcxShuffleManager) SparkEnv.get().shuffleManager();
     this.mempool = ucxShuffleManager.ucxNode().getMemoryPool();
-    this.handle = handle;
     this.shuffleReadMetrics = shuffleReadMetrics;
     this.workerWrapper = workerWrapper;
   }
@@ -53,7 +47,7 @@ public class UcxShuffleClient extends ShuffleClient {
    */
   private void submitFetchOffsets(UcpEndpoint endpoint, ShuffleBlockId[] blockIds,
                                   long[] dataAddresses, RegisteredMemory offsetMemory) {
-    DriverMetadata driverMetadata =  workerWrapper.fetchDriverMetadataBuffer(handle.shuffleId());
+    DriverMetadata driverMetadata =  workerWrapper.fetchDriverMetadataBuffer(blockIds[0].shuffleId());
     for (int i = 0; i < blockIds.length; i++) {
       ShuffleBlockId blockId = blockIds[i];
 
@@ -69,8 +63,8 @@ public class UcxShuffleClient extends ShuffleClient {
       endpoint.getNonBlockingImplicit(
         offsetAddress + blockId.reduceId() * UcxWorkerWrapper.LONG_SIZE(),
           offsetRkeysCache.get(blockId.mapId()),
-        UcxUtils.getAddress(offsetMemory.getBuffer()) + (i * 2 * UcxWorkerWrapper.LONG_SIZE()),
-        2 * UcxWorkerWrapper.LONG_SIZE());
+        UcxUtils.getAddress(offsetMemory.getBuffer()) + (i * 2L * UcxWorkerWrapper.LONG_SIZE()),
+        2L * UcxWorkerWrapper.LONG_SIZE());
     }
   }
 
@@ -94,7 +88,7 @@ public class UcxShuffleClient extends ShuffleClient {
     RegisteredMemory offsetMemory = mempool.get(2 * UcxWorkerWrapper.LONG_SIZE() * blockIds.length);
 
     ShuffleBlockId[] shuffleBlockIds = Arrays.stream(blockIds)
-      .map(blockId -> (ShuffleBlockId)BlockId$.MODULE$.apply(blockId)).toArray(ShuffleBlockId[]::new);
+      .map(blockId -> (ShuffleBlockId) BlockId.apply(blockId)).toArray(ShuffleBlockId[]::new);
 
     // Submits N implicit get requests without callback
     submitFetchOffsets(endpoint, shuffleBlockIds, dataAddresses, offsetMemory);
@@ -102,8 +96,8 @@ public class UcxShuffleClient extends ShuffleClient {
     // flush guarantees that all that requests completes when callback is called.
     // TODO: fix https://github.com/openucx/ucx/issues/4267 and use endpoint flush.
     workerWrapper.worker().flushNonBlocking(
-      new OnOffsetsFetchCallback(shuffleBlockIds, endpoint, this, listener, offsetMemory,
-        dataAddresses));
+      new OnOffsetsFetchCallback(shuffleBlockIds, endpoint, listener, offsetMemory,
+        dataAddresses, dataRkeysCache));
     shuffleReadMetrics.incFetchWaitTime(System.currentTimeMillis() - startTime);
   }
 

@@ -19,7 +19,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.UcxNode
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.Utils
 
 /**
  * Driver metadata buffer information that holds unpacked RkeyBuffer for this WorkerWrapper
@@ -101,7 +100,7 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
   def waitRequest(request: UcpRequest): Unit = {
     val startTime = System.currentTimeMillis()
     worker.progressRequest(request)
-    logDebug(s"Request completed in ${Utils.getUsedTimeMs(startTime)}")
+    logDebug(s"Request completed in ${System.currentTimeMillis() - startTime} ms")
   }
 
   /**
@@ -158,25 +157,12 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
    */
   def getDriverMetadata(shuffleId: ShuffleId): DriverMetadata = {
     driverMetadata.getOrElseUpdate(shuffleId, {
-      val handle = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
+      val ucxShuffleHandle = SparkEnv.get.shuffleManager.asInstanceOf[CommonUcxShuffleManager]
         .shuffleIdToHandle(shuffleId)
-      val (address, length, rkey): (Long, Int, ByteBuffer) =
-        handle match {
-          case ucxShuffleHandle: UcxBaseShuffleHandle[_, _, _] =>
-            (ucxShuffleHandle.metadataBufferOnDriver.getAddress,
+      val (address, length, rkey): (Long, Int, ByteBuffer) = (ucxShuffleHandle.metadataBufferOnDriver.getAddress,
               ucxShuffleHandle.numMaps * conf.metadataBlockSize.toInt,
               ucxShuffleHandle.metadataBufferOnDriver.getRkeyBuffer)
-          case ucxShuffleHandle: UcxSerializedShuffleHandle[_, _] =>
-            val ucxShuffleHandle = handle.asInstanceOf[UcxSerializedShuffleHandle[_, _]]
-            (ucxShuffleHandle.metadataBufferOnDriver.getAddress,
-              ucxShuffleHandle.numMaps * conf.metadataBlockSize.toInt,
-              ucxShuffleHandle.metadataBufferOnDriver.getRkeyBuffer)
-          case _ =>
-            val ucxShuffleHandle = handle.asInstanceOf[UcxBypassMergeSortShuffleHandle[_, _]]
-            (ucxShuffleHandle.metadataBufferOnDriver.getAddress,
-              ucxShuffleHandle.numMaps * conf.metadataBlockSize.toInt,
-              ucxShuffleHandle.metadataBufferOnDriver.getRkeyBuffer)
-        }
+
       rkey.clear()
       val unpackedRkey = driverEndpoint.unpackRemoteKey(rkey)
       DriverMetadata(address, unpackedRkey, length, null)
@@ -188,7 +174,7 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
    * for offset and data addresses and keys.
    */
   def fetchDriverMetadataBuffer(shuffleId: ShuffleId): DriverMetadata = {
-    val handle = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
+    val handle = SparkEnv.get.shuffleManager.asInstanceOf[CommonUcxShuffleManager]
       .shuffleIdToHandle(shuffleId)
 
     val metadata = getDriverMetadata(handle.shuffleId)
@@ -218,6 +204,6 @@ object UcxWorkerWrapper {
   // Driver metadata buffer, to fetch by first worker wrapper.
   val driverMetadataBuffer = new ConcurrentHashMap[ShuffleId, ByteBuffer]()
 
-  val metadataBlockSize =
-    SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager].ucxShuffleConf.metadataBlockSize.toInt
+  val metadataBlockSize: MapId =
+    SparkEnv.get.shuffleManager.asInstanceOf[CommonUcxShuffleManager].ucxShuffleConf.metadataBlockSize.toInt
 }

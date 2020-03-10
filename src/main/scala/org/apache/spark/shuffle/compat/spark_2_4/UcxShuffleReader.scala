@@ -2,7 +2,7 @@
 * Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
-package org.apache.spark.shuffle
+package org.apache.spark.shuffle.compat.spark_2_4
 
 import java.io.InputStream
 import java.util.concurrent.LinkedBlockingQueue
@@ -10,7 +10,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import org.apache.spark.{InterruptibleIterator, MapOutputTracker, SparkEnv, TaskContext}
 import org.apache.spark.internal.{Logging, config}
 import org.apache.spark.serializer.SerializerManager
-import org.apache.spark.shuffle.ucx.reducer.UcxShuffleClient
+import org.apache.spark.shuffle.{ShuffleReader, UcxShuffleHandle, UcxShuffleManager}
+import org.apache.spark.shuffle.ucx.reducer.compat.spark_2_4.UcxShuffleClient
 import org.apache.spark.storage.{BlockId, BlockManager, ShuffleBlockFetcherIterator}
 import org.apache.spark.util.CompletionIterator
 import org.apache.spark.util.collection.ExternalSorter
@@ -19,7 +20,7 @@ import org.apache.spark.util.collection.ExternalSorter
  * Extension of Spark's shuffe reader with a logic of injection UcxShuffleClient,
  * and lazy progress only when result queue is empty.
  */
-class UcxShuffleReader[K, C](handle: BaseShuffleHandle[K, _, C],
+class UcxShuffleReader[K, C](handle: UcxShuffleHandle[K, _, C],
   startPartition: Int,
   endPartition: Int,
   context: TaskContext,
@@ -28,14 +29,14 @@ class UcxShuffleReader[K, C](handle: BaseShuffleHandle[K, _, C],
   mapOutputTracker: MapOutputTracker = SparkEnv.get.mapOutputTracker)
   extends ShuffleReader[K, C] with Logging {
 
-    private val dep = handle.dependency
+    private val dep = handle.baseHandle.dependency
 
     /** Read the combined key-values for this reduce task */
     override def read(): Iterator[Product2[K, C]] = {
       val shuffleMetrics = context.taskMetrics().createTempShuffleReadMetrics()
       val workerWrapper = SparkEnv.get.shuffleManager.asInstanceOf[UcxShuffleManager]
         .ucxNode.getThreadLocalWorker
-      val shuffleClient = new UcxShuffleClient(handle, shuffleMetrics, workerWrapper)
+      val shuffleClient = new UcxShuffleClient(shuffleMetrics, workerWrapper)
       val wrappedStreams = new ShuffleBlockFetcherIterator(
         context,
         shuffleClient,

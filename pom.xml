@@ -31,15 +31,38 @@ See file LICENSE for terms.
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
     <encoding>UTF-8</encoding>
-    <scala.version>2.11.8</scala.version>
-    <scala.compat.version>2.11</scala.compat.version>
   </properties>
+
+  <profiles>
+    <profile>
+      <id>spark-2.4</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <properties>
+        <spark.version>2.4.0</spark.version>
+        <project.excludes>**/spark_3_0/**</project.excludes>
+        <scala.version>2.11.12</scala.version>
+        <scala.compat.version>2.11</scala.compat.version>
+      </properties>
+    </profile>
+    <profile>
+      <id>spark-3.0</id>
+      <properties>
+        <spark.version>3.0.0-preview2</spark.version>
+        <scala.version>2.12.10</scala.version>
+        <scala.compat.version>2.12</scala.compat.version>
+        <project.excludes>**/spark_2_4/**</project.excludes>
+      </properties>
+    </profile>
+  </profiles>
+
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.compat.version}</artifactId>
-      <version>2.4.0</version>
+      <version>${spark.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
@@ -50,13 +73,29 @@ See file LICENSE for terms.
   </dependencies>
 
   <build>
-    <finalName>${project.artifactId}-${project.version}-for-spark-2.4</finalName>
+    <finalName>${project.artifactId}-${project.version}-for-${project.activeProfiles[0].id}</finalName>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.8.1</version>
+        <configuration>
+          <source>1.8</source>
+          <target>1.8</target>
+          <excludes>
+            <exclude>${project.excludes}</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
         <version>4.3.0</version>
         <configuration>
+          <recompileMode>all</recompileMode>
+          <excludes>
+            <exclude>${project.excludes}</exclude>
+          </excludes>
           <args>
             <arg>-Xexperimental</arg>
             <arg>-Xfatal-warnings</arg>
