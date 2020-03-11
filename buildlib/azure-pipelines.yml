@@ -33,7 +33,7 @@ stages:
               options: "-B  -Dmaven.repo.local=$(System.DefaultWorkingDirectory)/target/.deps -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -Pspark-$(profile_version)"
           - bash: |
               set -xeE
-              module load tools/spark-$(spark_version)
+              module load tools/spark-$(spark_version) hpcx-gcc
               source buildlib/test.sh
 
               if [[ $(get_rdma_device_iface) != "" ]]
@@ -41,6 +41,7 @@ stages:
                 export SPARK_UCX_JAR=$(System.DefaultWorkingDirectory)/target/spark-ucx-1.0-for-spark-$(profile_version)-jar-with-dependencies.jar
                 export SPARK_LOCAL_DIRS=$(System.DefaultWorkingDirectory)/target/spark
                 export SPARK_VERSION=$(spark_version)
+                export UCX_LIB=$HPCX_UCX_DIR/lib
                 cd $(System.DefaultWorkingDirectory)/target/
                 run_tests
               else
