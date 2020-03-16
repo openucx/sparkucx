@@ -139,6 +139,8 @@ setup_configuration() {
 	EOF
 
     cp ${SPARK_HOME}/conf/log4j.properties.template ${SPARK_CONF_DIR}/log4j.properties
+    sed -i -e 's/INFO/WARN/g' ${SPARK_CONF_DIR}/log4j.properties
+    echo "log4j.logger.org.apache.spark.shuffle=DEBUG" >> ${SPARK_CONF_DIR}/log4j.properties
 }
 
 start_cluster() {

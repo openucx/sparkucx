@@ -36,7 +36,7 @@ public class UcxNode implements Closeable {
   private final boolean isDriver;
   private final UcpContext context;
   private final MemoryPool memoryPool;
-  private final UcpWorkerParams workerParams = new UcpWorkerParams().requestThreadSafety();
+  private final UcpWorkerParams workerParams = new UcpWorkerParams();
   private final UcpWorker globalWorker;
   private final UcxShuffleConf conf;
   // Mapping from spark's entity of BlockManagerId to UcxEntity workerAddress.
