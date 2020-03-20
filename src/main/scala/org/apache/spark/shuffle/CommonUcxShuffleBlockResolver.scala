@@ -4,7 +4,7 @@
 */
 package org.apache.spark.shuffle
 
-import java.io.{Closeable, File, RandomAccessFile}
+import java.io.{File, RandomAccessFile}
 import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArrayList}
 
 import scala.collection.JavaConverters._
