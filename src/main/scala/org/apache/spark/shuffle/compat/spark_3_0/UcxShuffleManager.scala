@@ -7,7 +7,7 @@ package org.apache.spark.shuffle
 import scala.collection.JavaConverters._
 
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
-import org.apache.spark.shuffle.compat.spark_3_0.UcxShuffleBlockResolver
+import org.apache.spark.shuffle.compat.spark_3_0.{UcxShuffleBlockResolver, UcxShuffleReader}
 import org.apache.spark.shuffle.sort.{SerializedShuffleHandle, SortShuffleWriter, UnsafeShuffleWriter}
 import org.apache.spark.util.ShutdownHookManager
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv, TaskContext}
@@ -55,8 +55,8 @@ class UcxShuffleManager(override val conf: SparkConf, isDriver: Boolean) extends
 
     startUcxNodeIfMissing()
     shuffleIdToHandle.putIfAbsent(handle.shuffleId, handle.asInstanceOf[UcxShuffleHandle[K, _, C]])
-    super.getReader(handle.asInstanceOf[UcxShuffleHandle[K,_,C]].baseHandle,
-      startPartition, endPartition, context, metrics)
+    new UcxShuffleReader(handle.asInstanceOf[UcxShuffleHandle[K,_,C]], startPartition, endPartition,
+      context, readMetrics = metrics, shouldBatchFetch = true)
   }
 
 

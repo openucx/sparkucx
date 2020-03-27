@@ -31,12 +31,11 @@ class UcxShuffleReader[K, C](handle: UcxShuffleHandle[K, _, C],
                              serializerManager: SerializerManager = SparkEnv.get.serializerManager,
                              blockManager: BlockManager = SparkEnv.get.blockManager,
                              readMetrics: ShuffleReadMetricsReporter,
-                             shouldBatchFetch: Boolean = false)
-  extends ShuffleReader[K, C] with Logging {
+                             shouldBatchFetch: Boolean = false) extends ShuffleReader[K, C] with Logging {
 
     private val dep = handle.baseHandle.dependency
 
-  /** Read the combined key-values for this reduce task */
+    /** Read the combined key-values for this reduce task */
     override def read(): Iterator[Product2[K, C]] = {
       val (blocksByAddressIterator1, blocksByAddressIterator2) = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
         handle.shuffleId, startPartition, endPartition).duplicate

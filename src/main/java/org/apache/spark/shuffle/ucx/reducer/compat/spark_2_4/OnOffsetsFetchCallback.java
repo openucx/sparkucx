@@ -5,6 +5,7 @@
 package org.apache.spark.shuffle.ucx.reducer.compat.spark_2_4;
 
 import org.apache.spark.network.shuffle.BlockFetchingListener;
+import org.apache.spark.shuffle.ucx.UnsafeUtils;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.shuffle.ucx.reducer.OnBlocksFetchCallback;
 import org.apache.spark.shuffle.ucx.reducer.ReducerCallback;
@@ -39,16 +40,18 @@ public class OnOffsetsFetchCallback extends ReducerCallback {
     ByteBuffer resultOffset = offsetMemory.getBuffer();
     long totalSize = 0;
     int[] sizes = new int[blockIds.length];
+    int offsetSize = UnsafeUtils.LONG_SIZE;
     for (int i = 0; i < blockIds.length; i++) {
-      long blockOffset = resultOffset.getLong(i * 16);
-      long blockLength = resultOffset.getLong(i * 16 + 8) - blockOffset;
-      assert (blockLength > 0) && (blockLength < Integer.MAX_VALUE);
+      // Blocks in metadata buffer are in form | blockOffsetStart | blockOffsetEnd |
+      long blockOffset = resultOffset.getLong(i * 2 * offsetSize);
+      long blockLength = resultOffset.getLong(i * 2 * offsetSize + offsetSize) - blockOffset;
+      assert (blockLength > 0) && (blockLength <= Integer.MAX_VALUE);
       sizes[i] = (int) blockLength;
       totalSize += blockLength;
       dataAddresses[i] += blockOffset;
     }
 
-    assert  (totalSize > 0) &&  (totalSize < Integer.MAX_VALUE);
+    assert  (totalSize > 0) && (totalSize < Integer.MAX_VALUE);
     mempool.put(offsetMemory);
     RegisteredMemory blocksMemory = mempool.get((int) totalSize);
 

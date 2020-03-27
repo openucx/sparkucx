@@ -12,6 +12,7 @@ import org.apache.spark.network.shuffle.DownloadFileManager;
 import org.apache.spark.shuffle.DriverMetadata;
 import org.apache.spark.shuffle.UcxShuffleManager;
 import org.apache.spark.shuffle.UcxWorkerWrapper;
+import org.apache.spark.shuffle.ucx.UnsafeUtils;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.*;
 import org.openucx.jucx.UcxUtils;
@@ -61,13 +62,13 @@ public class UcxShuffleClient extends BlockStoreClient {
       if (blockId instanceof ShuffleBlockId) {
         ShuffleBlockId shuffleBlockId = (ShuffleBlockId) blockId;
         mapIdpartition = mapId2PartitionId.get(shuffleBlockId.mapId());
-        size = 2L * UcxWorkerWrapper.LONG_SIZE();
+        size = 2L * UnsafeUtils.LONG_SIZE;
         startReduceId = shuffleBlockId.reduceId();
       } else {
         ShuffleBlockBatchId shuffleBlockBatchId = (ShuffleBlockBatchId) blockId;
         mapIdpartition = mapId2PartitionId.get(shuffleBlockBatchId.mapId());
         size = (shuffleBlockBatchId.endReduceId() - shuffleBlockBatchId.startReduceId())
-          * 2L * UcxWorkerWrapper.LONG_SIZE();
+          * 2L * UnsafeUtils.LONG_SIZE;
         startReduceId = shuffleBlockBatchId.startReduceId();
       }
 
@@ -81,7 +82,7 @@ public class UcxShuffleClient extends BlockStoreClient {
         endpoint.unpackRemoteKey(driverMetadata.dataRkey(mapIdpartition)));
 
       endpoint.getNonBlockingImplicit(
-        offsetAddress + startReduceId * UcxWorkerWrapper.LONG_SIZE(),
+        offsetAddress + startReduceId * UnsafeUtils.LONG_SIZE,
         offsetRkeysCache.get(mapIdpartition),
         UcxUtils.getAddress(offsetMemory.getBuffer()) + offset,
         size);
@@ -101,7 +102,7 @@ public class UcxShuffleClient extends BlockStoreClient {
 
     BlockId[] blocks = new BlockId[blockIds.length];
 
-    for (int i=0; i < blockIds.length; i++) {
+    for (int i = 0; i < blockIds.length; i++) {
       blocks[i] = BlockId.apply(blockIds[i]);
       if (blocks[i] instanceof ShuffleBlockId) {
         totalBlocks += 1;
@@ -112,7 +113,7 @@ public class UcxShuffleClient extends BlockStoreClient {
     }
 
     RegisteredMemory offsetMemory = ((UcxShuffleManager)SparkEnv.get().shuffleManager())
-      .ucxNode().getMemoryPool().get(totalBlocks * 2 * UcxWorkerWrapper.LONG_SIZE());
+      .ucxNode().getMemoryPool().get(totalBlocks * 2 * UnsafeUtils.LONG_SIZE);
     // Submits N implicit get requests without callback
     submitFetchOffsets(endpoint, blocks, offsetMemory, dataAddresses);
 

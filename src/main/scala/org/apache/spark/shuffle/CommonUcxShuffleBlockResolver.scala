@@ -50,7 +50,7 @@ abstract class CommonUcxShuffleBlockResolver(ucxShuffleManager: CommonUcxShuffle
     }
     val dataMemory = ucxShuffleManager.ucxNode.getContext.memoryMap(memMapParams)
     fileMappings(shuffleId).add(dataMemory)
-    assume(indexBackFile.length() == UcxWorkerWrapper.LONG_SIZE * (lengths.length + 1))
+    assume(indexBackFile.length() == UnsafeUtils.LONG_SIZE * (lengths.length + 1))
 
     val offsetAddress = UnsafeUtils.mmap(indexFileChannel, 0, indexBackFile.length())
     memMapParams.setAddress(offsetAddress).setLength(indexBackFile.length())
@@ -70,8 +70,8 @@ abstract class CommonUcxShuffleBlockResolver(ucxShuffleManager: CommonUcxShuffle
     val metadataBuffer = metadataRegisteredMemory.getBuffer.slice()
 
     if (metadataBuffer.remaining() > ucxShuffleManager.ucxShuffleConf.metadataBlockSize) {
-      throw new SparkException(s"Metadata block size ${metadataBuffer.remaining()} " +
-        s"is greater then configured 2 * ${ucxShuffleManager.ucxShuffleConf.RKEY_SIZE.key}" +
+      throw new SparkException(s"Metadata block size ${metadataBuffer.remaining() / 2} " +
+        s"is greater then configured ${ucxShuffleManager.ucxShuffleConf.RKEY_SIZE.key}" +
         s"(${ucxShuffleManager.ucxShuffleConf.metadataBlockSize}).")
     }
 
