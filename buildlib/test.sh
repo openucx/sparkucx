@@ -119,6 +119,7 @@ setup_configuration() {
 
     cat <<-EOF > ${SPARK_CONF_DIR}/spark-defaults.conf
 	spark.shuffle.manager org.apache.spark.shuffle.UcxShuffleManager
+	spark.shuffle.sort.io.plugin.class org.apache.spark.shuffle.compat.spark_3_0.UcxLocalDiskShuffleDataIO
 	spark.shuffle.readHostLocalDisk.enabled false
 	spark.driver.extraClassPath ${SPARK_UCX_JAR}:${UCX_LIB}
 	spark.executor.extraClassPath ${SPARK_UCX_JAR}:${UCX_LIB}

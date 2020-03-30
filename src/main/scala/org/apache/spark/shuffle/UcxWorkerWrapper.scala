@@ -16,7 +16,7 @@ import org.openucx.jucx.UcxException
 import org.openucx.jucx.ucp.{UcpEndpoint, UcpEndpointParams, UcpRemoteKey, UcpRequest, UcpWorker}
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.shuffle.ucx.UcxNode
+import org.apache.spark.shuffle.ucx.{UcxNode, UnsafeUtils}
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.unsafe.Platform
 
@@ -38,14 +38,14 @@ case class DriverMetadata(address: Long, driverRkey: UcpRemoteKey, length: Int,
 
   def dataAddress(mapId: Int): Long = {
     val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
-    data.getLong(mapIdBlock + UcxWorkerWrapper.LONG_SIZE)
+    data.getLong(mapIdBlock + UnsafeUtils.LONG_SIZE)
   }
 
   def offsetRkey(mapId: Int): ByteBuffer = {
     val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
-    var offsetWithinBlock = mapIdBlock + 2 * UcxWorkerWrapper.LONG_SIZE
+    var offsetWithinBlock = mapIdBlock + 2 * UnsafeUtils.LONG_SIZE
     val rkeySize = data.getInt(offsetWithinBlock)
-    offsetWithinBlock += UcxWorkerWrapper.INT_SIZE
+    offsetWithinBlock += UnsafeUtils.INT_SIZE
     val result = data.duplicate()
     result.position(offsetWithinBlock).limit(offsetWithinBlock + rkeySize)
     result.slice()
@@ -53,11 +53,11 @@ case class DriverMetadata(address: Long, driverRkey: UcpRemoteKey, length: Int,
 
   def dataRkey(mapId: Int): ByteBuffer = {
     val mapIdBlock = mapId * UcxWorkerWrapper.metadataBlockSize
-    var offsetWithinBlock = mapIdBlock + 2 * UcxWorkerWrapper.LONG_SIZE
+    var offsetWithinBlock = mapIdBlock + 2 * UnsafeUtils.LONG_SIZE
     val offsetRkeySize = data.getInt(offsetWithinBlock)
-    offsetWithinBlock += UcxWorkerWrapper.INT_SIZE + offsetRkeySize
+    offsetWithinBlock += UnsafeUtils.INT_SIZE + offsetRkeySize
     val dataRkeySize = data.getInt(offsetWithinBlock)
-    offsetWithinBlock += UcxWorkerWrapper.INT_SIZE
+    offsetWithinBlock += UnsafeUtils.INT_SIZE
     val result = data.duplicate()
     result.position(offsetWithinBlock).limit(offsetWithinBlock + dataRkeySize)
     result.slice()
@@ -199,8 +199,6 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
 object UcxWorkerWrapper {
   type ShuffleId = Int
   type MapId = Int
-  val LONG_SIZE = 8
-  val INT_SIZE = 4
   // Driver metadata buffer, to fetch by first worker wrapper.
   val driverMetadataBuffer = new ConcurrentHashMap[ShuffleId, ByteBuffer]()
 

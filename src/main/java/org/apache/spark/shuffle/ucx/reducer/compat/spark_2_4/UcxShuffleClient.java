@@ -10,6 +10,7 @@ import org.apache.spark.network.shuffle.BlockFetchingListener;
 import org.apache.spark.network.shuffle.DownloadFileManager;
 import org.apache.spark.network.shuffle.ShuffleClient;
 import org.apache.spark.shuffle.*;
+import org.apache.spark.shuffle.ucx.UnsafeUtils;
 import org.apache.spark.shuffle.ucx.memory.MemoryPool;
 import org.apache.spark.shuffle.ucx.memory.RegisteredMemory;
 import org.apache.spark.storage.BlockId;
@@ -61,10 +62,10 @@ public class UcxShuffleClient extends ShuffleClient {
         endpoint.unpackRemoteKey(driverMetadata.dataRkey(blockId.mapId())));
 
       endpoint.getNonBlockingImplicit(
-        offsetAddress + blockId.reduceId() * UcxWorkerWrapper.LONG_SIZE(),
+        offsetAddress + blockId.reduceId() * UnsafeUtils.LONG_SIZE,
           offsetRkeysCache.get(blockId.mapId()),
-        UcxUtils.getAddress(offsetMemory.getBuffer()) + (i * 2L * UcxWorkerWrapper.LONG_SIZE()),
-        2L * UcxWorkerWrapper.LONG_SIZE());
+        UcxUtils.getAddress(offsetMemory.getBuffer()) + (i * 2L * UnsafeUtils.LONG_SIZE),
+        2L * UnsafeUtils.LONG_SIZE);
     }
   }
 
@@ -85,7 +86,7 @@ public class UcxShuffleClient extends ShuffleClient {
     long[] dataAddresses = new long[blockIds.length];
 
     // Need to fetch 2 long offsets current block + next block to calculate exact block size.
-    RegisteredMemory offsetMemory = mempool.get(2 * UcxWorkerWrapper.LONG_SIZE() * blockIds.length);
+    RegisteredMemory offsetMemory = mempool.get(2 * UnsafeUtils.LONG_SIZE * blockIds.length);
 
     ShuffleBlockId[] shuffleBlockIds = Arrays.stream(blockIds)
       .map(blockId -> (ShuffleBlockId) BlockId.apply(blockId)).toArray(ShuffleBlockId[]::new);

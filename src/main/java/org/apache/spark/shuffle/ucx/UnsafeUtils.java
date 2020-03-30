@@ -26,6 +26,9 @@ public class UnsafeUtils {
 
   private static final Constructor<?> directBufferConstructor;
 
+  public static final int LONG_SIZE = 8;
+  public static final int INT_SIZE = 4;
+
   static {
     try {
       mmap = FileChannelImpl.class.getDeclaredMethod("map0", int.class, long.class, long.class);
