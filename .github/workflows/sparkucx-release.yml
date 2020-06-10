@@ -1,0 +1,42 @@
+on:
+    push:
+      # Sequence of patterns matched against refs/tags
+      tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+name: Upload Release Asset
+
+env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+    release:
+        strategy:
+          matrix:
+            spark_version: ["2.4", "3.0"]
+        runs-on: ubuntu-latest
+        steps:
+        - name: Checkout code
+          uses: actions/checkout@v2
+
+        - name: Set up JDK 1.8
+          uses: actions/setup-java@v1
+          with:
+            java-version: 1.8
+
+        - name: Build with Maven
+          id: maven_package
+          run: |
+            mvn -B -Pspark-${{ matrix.spark_version }} clean package \
+            -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn \
+            --file pom.xml
+            cd target
+            echo "::set-output name=jar_name::$(echo spark-ucx-*-jar-with-dependencies.jar)"
+
+        - name: Upload Release Jars
+          uses: svenstaro/upload-release-action@v1-release
+          with:
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            file: ./target/${{ steps.maven_package.outputs.jar_name }}
+            asset_name: ${{ steps.maven_package.outputs.jar_name }}
+            tag: ${{ github.ref }}

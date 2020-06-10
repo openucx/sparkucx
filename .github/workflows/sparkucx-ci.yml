@@ -1,18 +1,15 @@
 name: SparkUCX CI
 
 on:
-  push:
-    branches:
-    - master
   pull_request:
     branches:
     - master
 
-jobs:     
+jobs:
   build-sparkucx:
     strategy:
       matrix:
-        spark_version: [2.4, 3.0]
+        spark_version: ["2.4", "3.0"]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v1
@@ -21,7 +18,7 @@ jobs:
       with:
         java-version: 1.8
     - name: Build with Maven
-      run: mvn -B package -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
+      run: mvn -B package -Pspark-${{ matrix.spark_version }} -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn
            --file pom.xml
     - name: Run Sonar code analysis
       run: mvn -B sonar:sonar -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -Dsonar.projectKey=openucx:spark-ucx -Dsonar.organization=openucx -Dsonar.host.url=https://sonarcloud.io -Dsonar.login=97f4df88ff4fa04e2d5b061acf07315717f1f08b -Pspark-${{ matrix.spark_version }}

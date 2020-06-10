@@ -17,7 +17,7 @@ for your spark version (e.g. spark-ucx-1.0-for-spark-2.4.0-jar-with-dependencies
 Put SparkUCX jar file in $SPARK_UCX_HOME on all the nodes in your cluster.
 <br>If you would like to build the project yourself, please refer to the ["Build"](https://github.com/openucx/sparkucx#build) section below.
 
-Ucx binaries **must** be in `java.library.path` on every Spark Master and Worker.
+Ucx binaries **must** be in Spark classpath on every Spark Master and Worker.
 It can be obtained by installing latest version of [Mellanox OFED](http://www.mellanox.com/page/products_dyn?product_family=26)
 or following [ucx build instruction](https://github.com/openucx/ucx#using-ucx). E.g.:
 
@@ -37,18 +37,15 @@ Provide Spark the location of the SparkUCX plugin jars and ucx shared binaries b
 spark.driver.extraClassPath     $SPARK_UCX_HOME/spark-ucx-1.0-for-spark-2.4.0-jar-with-dependencies.jar:$UCX_PREFIX/lib
 spark.executor.extraClassPath   $SPARK_UCX_HOME/spark-ucx-1.0-for-spark-2.4.0-jar-with-dependencies.jar:$UCX_PREFIX/lib
 ```
-
-Add UCX shared binaries to `java.library.path` for Spark driver and executors:
-```
-spark.driver.extraJavaOptions      -Djava.library.path=$UCX_PREFIX/lib
-spark.executor.extraJavaOptions    -Djava.library.path=$UCX_PREFIX/lib
-```
-
 To enable the SparkUCX Shuffle Manager plugin, add the following configuration property
 to spark (e.g. in $SPARK_HOME/conf/spark-defaults.conf):
 
 ```
 spark.shuffle.manager   org.apache.spark.shuffle.UcxShuffleManager
+```
+For spark-3.0 version add SparkUCX ShuffleIO plugin:
+```
+spark.shuffle.sort.io.plugin.class org.apache.spark.shuffle.compat.spark_3_0.UcxLocalDiskShuffleDataIO
 ```
 
 ### Build
@@ -60,6 +57,12 @@ Build instructions:
 ```
 % git clone https://github.com/openucx/sparkucx
 % cd sparkucx
-% mvn -DskipTests clean package -Pspark-2.3
+% mvn -DskipTests clean package -Pspark-2.4
 ```
+
+### Performance
+
+SparkUCX plugin is built to provide the best performance out-of-the-box, and provides multiple configuration options to further tune SparkUCX per-job. For more information on how to setup [HiBench](https://github.com/Intel-bigdata/HiBench) benchmark and reproduce results, please refer to [Accelerated Apache SparkUCX 2.4/3.0 cluster deployment](https://docs.mellanox.com/pages/releaseview.action?pageId=19819236).
+
+![Performance results](https://docs.mellanox.com/download/attachments/19819236/image2020-1-23_15-39-14.png)
 
