@@ -10,8 +10,8 @@ See file LICENSE for terms.
                       http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.openucx</groupId>
-  <artifactId>spark-ucx</artifactId>
-  <version>1.0</version>
+  <artifactId>ucx-spark</artifactId>
+  <version>2.0</version>
   <name>${project.artifactId}</name>
   <description>
     A high-performance, scalable and efficient shuffle manager plugin for Apache Spark,
@@ -31,51 +31,27 @@ See file LICENSE for terms.
     <maven.compiler.source>1.8</maven.compiler.source>
     <maven.compiler.target>1.8</maven.compiler.target>
     <encoding>UTF-8</encoding>
+    <spark.version>3.0.0</spark.version>
+    <scala.version>2.12</scala.version>
+    <jucx.version>1.9.0-SNAPSHOT</jucx.version>
   </properties>
-
-  <profiles>
-    <profile>
-      <id>spark-2.4</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
-      <properties>
-        <spark.version>2.4.0</spark.version>
-        <project.excludes>**/spark_3_0/**</project.excludes>
-        <sonar.exclusions>**/spark_3_0/**</sonar.exclusions>
-        <scala.version>2.11.12</scala.version>
-        <scala.compat.version>2.11</scala.compat.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>spark-3.0</id>
-      <properties>
-        <spark.version>3.0.0-preview2</spark.version>
-        <scala.version>2.12.10</scala.version>
-        <scala.compat.version>2.12</scala.compat.version>
-        <project.excludes>**/spark_2_4/**</project.excludes>
-        <sonar.exclusions>**/spark_2_4/**</sonar.exclusions>
-      </properties>
-    </profile>
-  </profiles>
-
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.compat.version}</artifactId>
+      <artifactId>spark-core_${scala.version}</artifactId>
       <version>${spark.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.openucx</groupId>
       <artifactId>jucx</artifactId>
-      <version>1.8.0</version>
+      <version>${jucx.version}</version>
     </dependency>
   </dependencies>
 
   <build>
-    <finalName>${project.artifactId}-${project.version}-for-${project.activeProfiles[0].id}</finalName>
+    <finalName>${project.artifactId}-${project.version}-for-spark-${spark.version}</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -84,20 +60,14 @@ See file LICENSE for terms.
         <configuration>
           <source>1.8</source>
           <target>1.8</target>
-          <excludes>
-            <exclude>${project.excludes}</exclude>
-          </excludes>
         </configuration>
       </plugin>
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <version>4.3.0</version>
+        <version>4.4.0</version>
         <configuration>
           <recompileMode>all</recompileMode>
-          <excludes>
-            <exclude>${project.excludes}</exclude>
-          </excludes>
           <args>
             <arg>-Xexperimental</arg>
             <arg>-Xfatal-warnings</arg>
@@ -125,7 +95,7 @@ See file LICENSE for terms.
       </plugin>
       <plugin>
         <artifactId>maven-assembly-plugin</artifactId>
-        <version>3.1.1</version>
+        <version>3.3.0</version>
         <configuration>
           <descriptorRefs>
             <descriptorRef>jar-with-dependencies</descriptorRef>
