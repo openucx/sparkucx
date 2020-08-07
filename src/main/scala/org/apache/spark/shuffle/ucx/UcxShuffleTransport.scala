@@ -73,7 +73,8 @@ trait OperationCallback {
 trait UcxShuffleTransport {
 
   /**
-   * Initialize transport resources
+   * Initialize transport resources. This function should get called after ensuring that SparkConf
+   * has the correct configurations since it will use the spark configuration to configure itself.
    */
   def init()
 
@@ -81,11 +82,6 @@ trait UcxShuffleTransport {
    * Close all transport resources
    */
   def close()
-
-  /**
-   * Deserialize cookie from memory
-   */
-  def cookieFromMemory(memoryBlock: UcxMemoryBlock): Cookie
 
   /**
    * Registers blocks using blockId on SERVER side.
