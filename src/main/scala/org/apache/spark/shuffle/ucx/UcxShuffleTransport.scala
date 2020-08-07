@@ -98,7 +98,7 @@ trait UcxShuffleTransport {
   def cookieFromMemory(memoryBlock: UcxMemoryBlock): Cookie
 
   /**
-   * Registers blockId for either metadata blocks, or data blocks on SERVER side.
+   * Registers blocks using blockId on SERVER side.
    */
   def register(blockIds: Seq[BlockId], blocks: Seq[Block]): Seq[Cookie]
 
