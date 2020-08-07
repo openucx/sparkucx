@@ -116,13 +116,14 @@ trait UcxShuffleTransport {
   def unregister(blockIds: Seq[BlockId])
 
   /**
-   * Fetch remote blocks by blockIds
+   * Fetch remote blocks by blockIds. Result memory should have headroom for numBocks * 4.
+   * First numBocks * 4 bytes would be filled with block length (int) array.
    */
   def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
                             resultBuffer: UcxMemoryBlock, cb: OperationCallback)
 
   /**
-   * Fetch remote blocks by cookies
+   * Fetch remote blocks by cookies.
    */
   def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
                            resultBuffer: UcxMemoryBlock, cb: OperationCallback)
