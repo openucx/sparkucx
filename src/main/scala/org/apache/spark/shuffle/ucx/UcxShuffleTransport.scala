@@ -104,17 +104,11 @@ trait UcxShuffleTransport {
   def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
                             resultBuffer: UcxMemoryBlock, cb: OperationCallback)
 
-  def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
-                            resultBuffers: Seq[UcxMemoryBlock], cb: OperationCallback)
-
   /**
    * Fetch remote blocks by cookies
    */
   def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
                            resultBuffer: UcxMemoryBlock, cb: OperationCallback)
-
-  def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
-                           resultBuffers: Seq[UcxMemoryBlock], cb: OperationCallback)
 
   /**
    * Progress outstanding operations. This routine is blocking. It's important to call this routine
