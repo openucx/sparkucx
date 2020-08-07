@@ -27,16 +27,6 @@ trait Cookie {
  */
 trait BlockId
 
-/**
- * Special case for metadata blocks, that always would be fetched using
- * [[ UcxShuffleTransport.fetchBlocksByBlockIds() ]]. It has a method to get an actual blockId,
- * it refers to,so when requested this MetadataBlockId, transport could know that soon blockId
- * would be fetched, and may do some optimizations (pinning, pre-fetching, etc).
- */
-trait MetadataBlockId extends BlockId {
-  def getBlockId: BlockId
-}
-
 trait Block {
   // Transport will call this method when it would need an actual block memory.
   def getMemoryBlock: UcxMemoryBlock
@@ -115,19 +105,19 @@ trait UcxShuffleTransport {
   /**
    * Fetch remote blocks by blockIds
    */
-  def fetchBlocksByBlockIds(remoteHost: String, blockIds: Seq[BlockId],
+  def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
                             resultBuffer: UcxMemoryBlock, cb: OperationCallback)
 
-  def fetchBlocksByBlockIds(remoteHost: String, blockIds: Seq[BlockId],
+  def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
                             resultBuffers: Seq[UcxMemoryBlock], cb: OperationCallback)
 
   /**
    * Fetch remote blocks by cookies
    */
-  def fetchBlocksByCookies(remoteHost: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
+  def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
                            resultBuffer: UcxMemoryBlock, cb: OperationCallback)
 
-  def fetchBlocksByCookies(remoteHost: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
+  def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
                            resultBuffers: Seq[UcxMemoryBlock], cb: OperationCallback)
 
   /**
