@@ -117,7 +117,7 @@ class UcxWorkerWrapper(worker: UcpWorker, transport: UcxShuffleTransport, ucxCon
         endpointParams.setUcpAddress(workerAddresses.get(executorId).asInstanceOf[ByteBuffer])
       }
 
-      worker.newEndpoint(endpointParams)
+     worker.newEndpoint(endpointParams)
     })
   }
 
@@ -170,9 +170,16 @@ class UcxWorkerWrapper(worker: UcpWorker, transport: UcxShuffleTransport, ucxCon
     buffer.put(tag.toByte)
     Utils.tryWithResource(new ByteBufferBackedOutputStream(buffer)) { bos =>
       val out = new ObjectOutputStream(bos)
-      out.writeObject(message)
-      out.flush()
-      out.close()
+      try {
+        out.writeObject(message)
+        out.flush()
+        out.close()
+      } catch {
+        case _: BufferOverflowException =>
+          throw new UcxException(s"Prefetch blocks message size > " +
+            s"${transport.ucxShuffleConf.RPC_MESSAGE_SIZE.key}:${transport.ucxShuffleConf.rpcMessageSize}")
+        case ex: Exception => throw new UcxException(ex.getMessage)
+      }
     }
     val msgSize = buffer.position()
 
@@ -308,5 +315,5 @@ class UcxWorkerWrapper(worker: UcpWorker, transport: UcxShuffleTransport, ucxCon
         }
       })
     recvRequest
-  }
+ }
 }

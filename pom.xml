@@ -35,6 +35,7 @@ See file LICENSE for terms.
     <scala.version>2.12.12</scala.version>
     <scala.compat.version>2.12</scala.compat.version>
     <jucx.version>1.11.1-SNAPSHOT</jucx.version>
+    <cudf.version>0.16</cudf.version>
   </properties>
 
   <dependencies>
@@ -53,6 +54,12 @@ See file LICENSE for terms.
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.compat.version}</artifactId>
       <version>3.2.1</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ai.rapids</groupId>
+      <artifactId>cudf</artifactId>
+      <version>${cudf.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -133,6 +140,18 @@ See file LICENSE for terms.
             <id>test</id>
             <goals>
               <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.2.0</version>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
             </goals>
           </execution>
         </executions>

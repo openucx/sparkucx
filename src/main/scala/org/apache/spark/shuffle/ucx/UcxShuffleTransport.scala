@@ -196,6 +196,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, var executo
                                          blockIds: Seq[BlockId]) {
 
     val startTime = System.nanoTime()
+    logDebug(s"Prefetching blocks: ${blockIds.mkString(",")}")
     clientConnections.getOrElseUpdate(workerId,
       globalWorker.newEndpoint(new UcpEndpointParams().setUcpAddress(workerAddress))
     )
@@ -235,8 +236,8 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, var executo
               registeredBlocks.put(blockId, pinnedBlock.block)
               pinnedBlock.ucpMemory.deregister()
             }
-          }
-          lock.unlock()
+         }
+         lock.unlock()
         }
 
         override def onError(ucsStatus: Int, errorMsg: String): Unit = {
