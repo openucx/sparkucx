@@ -36,12 +36,29 @@ trait Block {
   def doneWithMemory(mem: UcxMemoryBlock)
 }
 
+trait OprationStatus extends Enumeration {
+  val SUCCESS = Value(0)
+  val FAILURE = Value(1)
+}
+
+/**
+ * Operation statistic, like completionTime, transport used, protocol used, etc.
+ */
+trait OperationStats
+
+trait TransportError extends Throwable
+
+trait OperationResult {
+  def getStatus: OprationStatus
+  def getError: TransportError
+  def getStats: OperationStats
+}
+
 /**
  * Async operation callbacks
  */
 trait OperationCallback {
-  def onSuccess()
-  def onFailure(throwable: Throwable)
+  def onComplete(result: OperationResult)
 }
 
 /**
