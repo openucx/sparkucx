@@ -1,10 +1,11 @@
 /*
-* Copyright (c) 2020, NVIDIA CORPORATION. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 package org.apache.spark.shuffle.ucx
 
 import java.nio.ByteBuffer
+import java.util.concurrent.locks.StampedLock
 
 /**
  * Class that represents some block in memory with it's address, size.
@@ -25,6 +26,9 @@ trait BlockId
 trait Block {
   // Transport will call this method when it would need an actual block memory.
   def getMemoryBlock: MemoryBlock
+
+  // Private transport lock to know when there are outstanding operations to block memory.
+  private[ucx] val lock = new StampedLock().asReadWriteLock()
 }
 
 object OperationStatus extends Enumeration {
