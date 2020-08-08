@@ -6,7 +6,7 @@ package org.apache.spark.shuffle.ucx
 
 /**
  * Class that represents some block in memory with it's address, size.
- * @param isHostMemory - host or GPU memory
+ * @param isHostMemory host or GPU memory
  */
 case class UcxMemoryBlock(address: Long, size: Long, isHostMemory: Boolean = true)
 
@@ -49,6 +49,7 @@ trait OperationStats
 trait TransportError extends Throwable
 
 trait OperationResult {
+  def recvSize: Long
   def getStatus: OprationStatus
   def getError: TransportError
   def getStats: OperationStats
@@ -116,8 +117,7 @@ trait UcxShuffleTransport {
   def unregister(blockIds: Seq[BlockId])
 
   /**
-   * Fetch remote blocks by blockIds. Result memory should have headroom for numBocks * 4.
-   * First numBocks * 4 bytes would be filled with block length (int) array.
+   * Fetch remote blocks by blockIds.
    */
   def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
                             resultBuffer: UcxMemoryBlock, cb: OperationCallback)
