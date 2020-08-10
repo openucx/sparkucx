@@ -4,8 +4,11 @@
 */
 package org.apache.spark.shuffle.ucx
 
+import java.nio.ByteBuffer
+
 /**
  * Class that represents some block in memory with it's address, size.
+ *
  * @param isHostMemory host or GPU memory
  */
 case class UcxMemoryBlock(address: Long, size: Long, isHostMemory: Boolean = true)
@@ -36,9 +39,9 @@ trait Block {
   def doneWithMemory(mem: UcxMemoryBlock)
 }
 
-trait OprationStatus extends Enumeration {
-  val SUCCESS = Value(0)
-  val FAILURE = Value(1)
+trait OperationStatus extends Enumeration {
+  val SUCCESS: Value = Value(0)
+  val FAILURE: Value = Value(1)
 }
 
 /**
@@ -50,7 +53,7 @@ trait TransportError extends Throwable
 
 trait OperationResult {
   def recvSize: Long
-  def getStatus: OprationStatus
+  def getStatus: OperationStatus
   def getError: TransportError
   def getStats: OperationStats
 }
@@ -100,6 +103,12 @@ trait UcxShuffleTransport {
    * Close all transport resources
    */
   def close()
+
+  /**
+   * Add executor's worker address. For standalone testing purpose and for implementations that makes
+   * connection establishment outside of UcxShuffleManager.
+   */
+  def addExecutor(executorId: String, workerAddress: ByteBuffer)
 
   /**
    * Registers blocks using blockId on SERVER side.
