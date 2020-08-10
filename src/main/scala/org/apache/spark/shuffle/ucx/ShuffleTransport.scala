@@ -4,21 +4,21 @@
 */
 package org.apache.spark.shuffle.ucx
 
-import java.nio.ByteBuffer
+import org.apache.directory.api.util.ByteBuffer
 
 /**
  * Class that represents some block in memory with it's address, size.
  *
  * @param isHostMemory host or GPU memory
  */
-case class UcxMemoryBlock(address: Long, size: Long, isHostMemory: Boolean = true)
+case class MemoryBlock(address: Long, size: Long, isHostMemory: Boolean = true)
 
 /**
  * Opaque object to describe remote memory block (address, rkey, etc.).
  */
 trait Cookie {
   // Write this cookie to some address in memory
-  def writeToMemory(memory: UcxMemoryBlock)
+  def writeToMemory(memory: MemoryBlock)
 
   // Size of this cookie in bytes
   def size: Int
@@ -32,11 +32,11 @@ trait BlockId
 
 trait Block {
   // Transport will call this method when it would need an actual block memory.
-  def getMemoryBlock: UcxMemoryBlock
+  def getMemoryBlock: MemoryBlock
 
   // Called when the transport is done with the Memory, so we can unmap it for example
   // the transport is not to use this Memory anymore
-  def doneWithMemory(mem: UcxMemoryBlock)
+  def doneWithMemory(mem: MemoryBlock)
 }
 
 trait OperationStatus extends Enumeration {
@@ -91,7 +91,7 @@ trait OperationCallback {
  * transport.unregister(blockIds)
  * transport.close()
  */
-trait UcxShuffleTransport {
+trait ShuffleTransport {
 
   /**
    * Initialize transport resources. This function should get called after ensuring that SparkConf
@@ -129,13 +129,13 @@ trait UcxShuffleTransport {
    * Fetch remote blocks by blockIds.
    */
   def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
-                            resultBuffer: UcxMemoryBlock, cb: OperationCallback)
+                            resultBuffer: MemoryBlock, cb: OperationCallback)
 
   /**
    * Fetch remote blocks by cookies.
    */
   def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
-                           resultBuffer: UcxMemoryBlock, cb: OperationCallback)
+                           resultBuffer: MemoryBlock, cb: OperationCallback)
 
   /**
    * Progress outstanding operations. This routine is blocking. It's important to call this routine
