@@ -4,7 +4,7 @@
 */
 package org.apache.spark.shuffle.ucx
 
-import org.apache.directory.api.util.ByteBuffer
+import java.nio.ByteBuffer
 
 /**
  * Class that represents some block in memory with it's address, size.
@@ -22,6 +22,9 @@ trait Cookie {
 
   // Size of this cookie in bytes
   def size: Int
+
+  // Reference
+  def getBlockId: BlockId
 }
 
 /**
@@ -33,15 +36,11 @@ trait BlockId
 trait Block {
   // Transport will call this method when it would need an actual block memory.
   def getMemoryBlock: MemoryBlock
-
-  // Called when the transport is done with the Memory, so we can unmap it for example
-  // the transport is not to use this Memory anymore
-  def doneWithMemory(mem: MemoryBlock)
 }
 
-trait OperationStatus extends Enumeration {
-  val SUCCESS: Value = Value(0)
-  val FAILURE: Value = Value(1)
+
+object OperationStatus extends Enumeration {
+  val SUCCESS, FAILURE = Value
 }
 
 /**
@@ -49,11 +48,11 @@ trait OperationStatus extends Enumeration {
  */
 trait OperationStats
 
-trait TransportError extends Throwable
+class TransportError(errorMsg: String) extends Exception(errorMsg)
 
 trait OperationResult {
   def recvSize: Long
-  def getStatus: OperationStatus
+  def getStatus: OperationStatus.Value
   def getError: TransportError
   def getStats: OperationStats
 }
@@ -83,7 +82,7 @@ trait OperationCallback {
  * 2. Deserialize cookies from result buffer:
  * val cookies = blockIds.map(_ => transport.getCookieFromMemory(resultBuffer))
  * 3. Fetch blocks by cookies:
- * transport.fetchBlocksByCookies(remoteExecutor, dataBlockIds, cookies, resultBuffer, callback)
+ * transport.fetchBlocksByCookies(remoteExecutor, cookies, resultBuffer, callback)
  * 4. Progress communications:
  * while(noMoreBlocks) { transport.progress() }
  *
@@ -134,7 +133,7 @@ trait ShuffleTransport {
   /**
    * Fetch remote blocks by cookies.
    */
-  def fetchBlocksByCookies(executorId: String, blockIds: Seq[BlockId], cookies: Seq[Cookie],
+  def fetchBlocksByCookies(executorId: String, cookies: Seq[Cookie],
                            resultBuffer: MemoryBlock, cb: OperationCallback)
 
   /**
