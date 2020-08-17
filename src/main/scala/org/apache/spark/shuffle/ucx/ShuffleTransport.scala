@@ -16,16 +16,7 @@ case class MemoryBlock(address: Long, size: Long, isHostMemory: Boolean = true)
 /**
  * Opaque object to describe remote memory block (address, rkey, etc.).
  */
-trait Cookie {
-  // Write this cookie to some address in memory
-  def writeToMemory(memory: MemoryBlock)
-
-  // Size of this cookie in bytes
-  def size: Int
-
-  // Reference
-  def getBlockId: BlockId
-}
+trait Cookie
 
 /**
  * Base class to indicate some blockId. It should be hashable and could be constructed on both ends.
@@ -46,7 +37,9 @@ object OperationStatus extends Enumeration {
 /**
  * Operation statistic, like completionTime, transport used, protocol used, etc.
  */
-trait OperationStats
+trait OperationStats {
+  def getElapsedTimeNs: Long
+}
 
 class TransportError(errorMsg: String) extends Exception(errorMsg)
 
@@ -70,24 +63,12 @@ trait OperationCallback {
  * transport.init()
  *
  * Mapper/writer:
- * val cookies = transport.register(dataBlockIds, blocks)
- * val metadataBlockIds = dataBlockIds.map(dataBlockId => new MetadataBlockId(dataBlockId))
- * cookies.foreach(cookie => cookie.writeToMemory(metadataBlocks))
- * transport.register(metadataBlockIds, metadataBlocks) // we don't care for metadata cookies
- *
+ * transport.register(metadataBlockId, metadataBlock) // we don't care for metadata cookies
  *
  * Reducer:
- * 1. First need to fetch metadata for blockIds:
- * transport.fetchBlocksByBlockIds(remoteExecutor, metadataBlockIds, resultBuffer, callback)
- * 2. Deserialize cookies from result buffer:
- * val cookies = blockIds.map(_ => transport.getCookieFromMemory(resultBuffer))
- * 3. Fetch blocks by cookies:
- * transport.fetchBlocksByCookies(remoteExecutor, cookies, resultBuffer, callback)
- * 4. Progress communications:
- * while(noMoreBlocks) { transport.progress() }
+ * transport.fetchBlockByBlockId(blockId, resultBounceBuffer)
  *
- *
- * transport.unregister(blockIds)
+ * transport.unregister(blockId)
  * transport.close()
  */
 trait ShuffleTransport {
@@ -113,7 +94,7 @@ trait ShuffleTransport {
   /**
    * Registers blocks using blockId on SERVER side.
    */
-  def register(blockIds: Seq[BlockId], blocks: Seq[Block]): Seq[Cookie]
+  def register(blockId: BlockId, block: Block): Cookie
 
   /**
    * Change location of underlying blockId in memory
@@ -123,13 +104,13 @@ trait ShuffleTransport {
   /**
    * Indicate that this blockId is not needed any more by an application
    */
-  def unregister(blockIds: Seq[BlockId])
+  def unregister(blockId: BlockId)
 
   /**
    * Fetch remote blocks by blockIds.
    */
-  def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
-                            resultBuffer: MemoryBlock, cb: OperationCallback)
+  def fetchBlockByBlockId(executorId: String, blockIds: BlockId,
+                          resultBuffer: MemoryBlock, cb: OperationCallback)
 
   /**
    * Fetch remote blocks by cookies.
