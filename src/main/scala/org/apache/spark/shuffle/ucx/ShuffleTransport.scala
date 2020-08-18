@@ -99,7 +99,7 @@ trait ShuffleTransport {
   /**
    * Change location of underlying blockId in memory
    */
-  def mutate(blockId: BlockId, block: Block, callback: OperationCallback)
+  def mutate(blockId: BlockId, newBlock: Block, callback: OperationCallback)
 
   /**
    * Indicate that this blockId is not needed any more by an application
