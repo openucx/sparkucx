@@ -109,7 +109,7 @@ trait ShuffleTransport {
   /**
    * Fetch remote blocks by blockIds.
    */
-  def fetchBlockByBlockId(executorId: String, blockIds: BlockId,
+  def fetchBlockByBlockId(executorId: String, blockId: BlockId,
                           resultBuffer: MemoryBlock, cb: OperationCallback)
 
   /**
