@@ -28,7 +28,7 @@ import org.apache.spark.util.Utils
  * it may not be actually pinned if used with [[ UcxShuffleConf.useOdp ]] flag.
  */
 case class UcxPinnedBlock(block: Block, ucpMemory: UcpMemory) extends Block {
-  override def getMemoryBlock: MemoryBlock = MemoryBlock(ucpMemory.getAddress, ucpMemory.getLength)
+  override def getMemoryBlock: MemoryBlock = block.getMemoryBlock
 }
 
 class UcxStats extends OperationStats {
@@ -100,7 +100,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
     }
 
     val params = new UcpParams().requestTagFeature().requestWakeupFeature()
-    if (ucxShuffleConf.protocol == "one-sided") {
+    if (ucxShuffleConf.protocol == ucxShuffleConf.PROTOCOL.ONE_SIDED) {
       params.requestRmaFeature()
     }
     ucxContext = new UcpContext(params)
@@ -233,7 +233,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
 
           override def getError: TransportError = new TransportError(t.getMessage)
 
-          override def getStats: Option[OperationStats] = null
+          override def getStats: Option[OperationStats] = None
         })
       }
       case Success(_) => if (callback != null) {
@@ -242,7 +242,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
 
           override def getError: TransportError = null
 
-          override def getStats: Option[OperationStats] = null
+          override def getStats: Option[OperationStats] = None
         })
       }
     }

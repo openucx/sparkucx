@@ -9,15 +9,20 @@ import org.apache.spark.internal.config.{ConfigBuilder, ConfigEntry}
 import org.apache.spark.network.util.ByteUnit
 
 class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
+  object PROTOCOL extends Enumeration {
+    val ONE_SIDED, RNDV = Value
+  }
+
   private def getUcxConf(name: String) = s"spark.shuffle.ucx.$name"
 
-  private val PROTOCOL =
+  private val PROTOCOL_CONF =
     ConfigBuilder(getUcxConf("protocol"))
-      .doc("Which protocol to use: rndv (default), one-sided")
+      .doc("Which protocol to use: RNDV (default), ONE-SIDED")
       .stringConf
       .checkValue(protocol => protocol == "rndv" || protocol == "one-sided",
         "Invalid protocol. Valid options: rndv / one-sided.")
-      .createWithDefault("rndv")
+      .transform(_.toUpperCase.replace("-", "_"))
+      .createWithDefault("RNDV")
 
   private val MEMORY_PINNING =
     ConfigBuilder(getUcxConf("memoryPinning"))
@@ -33,7 +38,8 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
 
   private lazy val RPC_MESSAGE_SIZE =
     ConfigBuilder(getUcxConf("rpcMessageSize"))
-      .doc("Size of RPC message to send from fetchBlockByBlockId. Must contain ")
+      .doc("Size of RPC message to send from fetchBlockByBlockId." +
+        " Must contain worker address + serialized BlockId ")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(size => size > maxWorkerAddressSize,
         "Rpc message must contain workerAddress")
@@ -51,9 +57,16 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
       .intConf
       .createWithDefault(5)
 
-  lazy val protocol: String = conf.get(PROTOCOL.key, PROTOCOL.defaultValueString)
+  private lazy val USE_ODP =
+    ConfigBuilder(getUcxConf("useOdp"))
+      .doc("Whether to use on demand paging feature, to avoid memory pinning")
+      .booleanConf
+      .createWithDefault(false)
 
-  lazy val useOdp: Boolean = conf.getBoolean(getUcxConf("memory.useOdp"), defaultValue = false)
+  lazy val protocol: PROTOCOL.Value = PROTOCOL.withName(
+    conf.get(PROTOCOL_CONF.key, PROTOCOL_CONF.defaultValueString))
+
+  lazy val useOdp: Boolean = conf.getBoolean(USE_ODP.key, USE_ODP.defaultValue.get)
 
   lazy val pinMemory: Boolean = conf.getBoolean(MEMORY_PINNING.key, MEMORY_PINNING.defaultValue.get)
 
