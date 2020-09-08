@@ -89,7 +89,7 @@ class UcxWorkerWrapper(worker: UcpWorker, transport: UcxShuffleTransport, ucxCon
       logInfo(s"Worker from thread ${Thread.currentThread().getName} connecting to $executorId")
       val endpointParams = new UcpEndpointParams()
         .setUcpAddress(workerAdresses.get(executorId))
-     worker.newEndpoint(endpointParams)
+      worker.newEndpoint(endpointParams)
     })
   }
 
