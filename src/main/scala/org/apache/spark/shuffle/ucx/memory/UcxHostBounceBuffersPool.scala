@@ -5,46 +5,85 @@
 package org.apache.spark.shuffle.ucx.memory
 
 import java.io.Closeable
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedDeque}
 
 import org.openucx.jucx.ucp.{UcpContext, UcpMemMapParams, UcpMemory}
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.{MemoryBlock, UcxShuffleConf}
 
 /**
  * Pre-registered host bounce buffers.
- * TODO: support pre-allocation and reclamation
+ * TODO: support reclamation
  */
-class UcxHostBounceBufferMemoryBlock(val memory: UcpMemory, override val address: Long,
-                                     override val size: Long)
+class UcxHostBounceBufferMemoryBlock(private[ucx] val memory: UcpMemory, private[ucx] val refCount: AtomicInteger,
+                                     override val address: Long, override val size: Long)
   extends MemoryBlock(address, size)
 
-class UcxHostBounceBuffersPool(conf: UcxShuffleConf, ucxContext: UcpContext)
-  extends MemoryPool {
+class UcxHostBounceBuffersPool(ucxShuffleConf: UcxShuffleConf, ucxContext: UcpContext)
+  extends MemoryPool with Logging {
+
+  private val allocatorMap = new ConcurrentHashMap[Long, AllocatorStack]()
+
+  ucxShuffleConf.preallocateBuffersMap.foreach {
+    case (size, numBuffers) =>
+      val roundedSize = roundUpToTheNextPowerOf2(size)
+      logDebug(s"Pre allocating $numBuffers buffers of size $roundedSize")
+      val allocatorStack = allocatorMap.computeIfAbsent(roundedSize, s => AllocatorStack(s))
+      allocatorStack.preallocate(numBuffers)
+  }
 
   private case class AllocatorStack(length: Long) extends Closeable {
-    private val stack = new ConcurrentLinkedDeque[UcpMemory]
+    private val stack = new ConcurrentLinkedDeque[UcxHostBounceBufferMemoryBlock]
+    private val numAllocs = new AtomicInteger(0)
 
-    def get: UcpMemory = {
+    private[UcxHostBounceBuffersPool] def get: UcxHostBounceBufferMemoryBlock = {
       var result = stack.pollFirst()
       if (result == null) {
-        result = ucxContext.memoryMap(new UcpMemMapParams().allocate().setLength(length))
+        numAllocs.incrementAndGet()
+        if (length < ucxShuffleConf.minRegistrationSize) {
+          preallocate((ucxShuffleConf.minRegistrationSize / length).toInt)
+          result = stack.pollFirst()
+        } else {
+          val memory = ucxContext.memoryMap(new UcpMemMapParams().allocate().setLength(length))
+          result = new UcxHostBounceBufferMemoryBlock(memory, new AtomicInteger(1),
+            memory.getAddress, length)
+        }
       }
       result
     }
 
-    def put(ucpMemory: UcpMemory) {
-      stack.add(ucpMemory)
+    private[UcxHostBounceBuffersPool] def put(block: UcxHostBounceBufferMemoryBlock): Unit = {
+      stack.add(block)
+    }
+
+    private[ucx] def preallocate(numBuffers: Int): Unit = {
+      val memory = ucxContext.memoryMap(
+        new UcpMemMapParams().allocate().setLength(length * numBuffers))
+      val refCount = new AtomicInteger(numBuffers)
+      var offset = 0L
+      (0 until numBuffers).foreach(_ => {
+        stack.add(new UcxHostBounceBufferMemoryBlock(memory, refCount, memory.getAddress + offset, length))
+        offset += length
+      })
     }
 
     override def close(): Unit = {
-      stack.forEach(_.deregister())
+      var numBuffers = 0
+      stack.forEach(block => {
+        block.refCount.decrementAndGet()
+        if (block.memory.getNativeId != null) {
+          block.memory.deregister()
+        }
+        numBuffers += 1
+      })
+      logInfo(s"Closing $numBuffers buffers of size $length." +
+        s"Number of allocations: ${numAllocs.get()}")
       stack.clear()
     }
   }
 
-  private val allocatorMap = new ConcurrentHashMap[Long, AllocatorStack]()
-
-  private def roundUpToTheNextPowerOf2(size: Long): Long  = {
+  private def roundUpToTheNextPowerOf2(size: Long): Long = {
     // Round up length to the nearest power of two
     var length = size
     length -= 1
@@ -60,18 +99,18 @@ class UcxHostBounceBuffersPool(conf: UcxShuffleConf, ucxContext: UcpContext)
   override def get(size: Long): MemoryBlock = {
     val roundedSize = roundUpToTheNextPowerOf2(size)
     val allocatorStack = allocatorMap.computeIfAbsent(roundedSize, s => AllocatorStack(s))
-    val ucpMemory = allocatorStack.get
-    new UcxHostBounceBufferMemoryBlock(ucpMemory, ucpMemory.getAddress, size)
+    allocatorStack.get
   }
 
   override def put(mem: MemoryBlock): Unit = {
     val allocatorStack = allocatorMap.computeIfAbsent(roundUpToTheNextPowerOf2(mem.size),
       s => AllocatorStack(s))
-    allocatorStack.put(mem.asInstanceOf[UcxHostBounceBufferMemoryBlock].memory)
+    allocatorStack.put(mem.asInstanceOf[UcxHostBounceBufferMemoryBlock])
   }
 
   override def close(): Unit = {
     allocatorMap.values.forEach(allocator => allocator.close())
     allocatorMap.clear()
   }
+
 }

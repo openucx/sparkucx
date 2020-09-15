@@ -19,7 +19,7 @@ class UcxShuffleTransportTestSuite extends AnyFunSuite {
 
   class ServerExecutor extends Thread {
     val ID: String = "1"
-    private val transport = new UcxShuffleTransport(conf)
+    private val transport = new UcxShuffleTransport(conf, ID)
     val workerAddress: ByteBuffer = transport.init()
 
     override def run(): Unit = {
@@ -48,7 +48,7 @@ class UcxShuffleTransportTestSuite extends AnyFunSuite {
       transport.close()
     }
 
-    def mutateBlock(cb: OperationCallback) {
+    def mutateBlock(cb: OperationCallback): Unit = {
       transport.mutate(TestBlockId(2), new Block {
         override def getMemoryBlock: MemoryBlock = {
           val buf = ByteBuffer.allocateDirect(blockSize)
@@ -64,7 +64,7 @@ class UcxShuffleTransportTestSuite extends AnyFunSuite {
     val server = new ServerExecutor
     server.start()
 
-    val transport = new UcxShuffleTransport(conf)
+    val transport = new UcxShuffleTransport(conf, "2")
     transport.init()
 
     transport.addExecutor(server.ID, server.workerAddress)

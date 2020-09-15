@@ -3,9 +3,7 @@
 * See file LICENSE for terms.
 */
 package org.apache.spark.shuffle.ucx
-import java.io.ObjectInputStream
 import java.nio.ByteBuffer
-import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
@@ -13,21 +11,20 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 
-import com.fasterxml.jackson.databind.util.ByteBufferBackedInputStream
 import org.openucx.jucx.ucp._
-import org.openucx.jucx.{UcxCallback, UcxException, UcxUtils}
+import org.openucx.jucx.{UcxCallback, UcxException}
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.memory.{MemoryPool, UcxHostBounceBuffersPool}
 import org.apache.spark.shuffle.ucx.rpc.GlobalWorkerRpcThread
-import org.apache.spark.util.Utils
 
 
 /**
  * Special type of [[ Block ]] interface backed by UcpMemory,
  * it may not be actually pinned if used with [[ UcxShuffleConf.useOdp ]] flag.
  */
-case class UcxPinnedBlock(block: Block, ucpMemory: UcpMemory) extends Block {
+case class UcxPinnedBlock(block: Block, ucpMemory: UcpMemory, prefetched: Boolean = false)
+  extends Block {
   override def getMemoryBlock: MemoryBlock = block.getMemoryBlock
 }
 
@@ -62,8 +59,7 @@ class UcxRequest(request: UcpRequest, stats: OperationStats) extends Request {
 /**
  * UCX implementation of [[ ShuffleTransport ]] API
  */
-class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
-                          var executorId: String = UUID.randomUUID().toString)
+class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, val executorId: String)
   extends ShuffleTransport with Logging {
 
   // UCX entities
@@ -78,10 +74,6 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
 
   private val registeredBlocks = new ConcurrentHashMap[BlockId, Block]
   private val memMapParams = new UcpMemMapParams()
-
-  if (ucxShuffleConf != null && ucxShuffleConf.useOdp) {
-    memMapParams.nonBlocking()
-  }
 
   // Mapping between executorId and it's address
   private[ucx] val executorIdToAddress = new ConcurrentHashMap[String, ByteBuffer]()
@@ -99,12 +91,17 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
       ucxShuffleConf = new UcxShuffleConf(SparkEnv.get.conf)
     }
 
+    if (ucxShuffleConf.useOdp) {
+      memMapParams.nonBlocking()
+    }
+
     val params = new UcpParams().requestTagFeature().requestWakeupFeature()
-    if (ucxShuffleConf.protocol == ucxShuffleConf.PROTOCOL.ONE_SIDED) {
+    if (ucxShuffleConf.protocol == "one-sided") {
       params.requestRmaFeature()
     }
     ucxContext = new UcpContext(params)
-    globalWorker = ucxContext.newWorker(new UcpWorkerParams().requestWakeupTagRecv())
+    globalWorker = ucxContext.newWorker(new UcpWorkerParams().requestWakeupTagRecv()
+      .requestWakeupTagSend())
 
     val result = globalWorker.getAddress
     require(result.capacity <= ucxShuffleConf.maxWorkerAddressSize,
@@ -153,33 +150,31 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
     executorIdToAddress.put(executorId, workerAddress)
   }
 
-  /**
-   * On a sender side process request of fetchBlockByBlockId
-   */
-  private[ucx] def replyFetchBlockRequest(memoryBlock: MemoryBlock) {
-    val buffer = UcxUtils.getByteBufferView(memoryBlock.address, memoryBlock.size.toInt)
+  private[ucx] def handlePrefetchRequest(workerId: String, workerAddress: ByteBuffer,
+                                         blockIds: Seq[BlockId]) {
 
-    val tag = buffer.getLong()
-    val idSize = buffer.getInt()
-    val idArray = new Array[Byte](idSize)
-    buffer.get(idArray)
-
-    val id = new String(idArray)
-    val workerAddressSize = buffer.getInt()
-    val workerAddress = buffer.slice()
-
-    workerAddress.limit(workerAddressSize)
-    buffer.position(buffer.position() + workerAddressSize)
-
-    val ep = clientConnections.getOrElseUpdate(id,
+    logInfo(s"Prefetching blocks: ${blockIds.mkString(",")}")
+    clientConnections.getOrElseUpdate(workerId,
       globalWorker.newEndpoint(new UcpEndpointParams().setUcpAddress(workerAddress))
     )
 
-    val blockId: BlockId =
-      Utils.tryWithResource(new ByteBufferBackedInputStream(buffer))(bin => {
-        val in = new ObjectInputStream(bin)
-        in.readObject().asInstanceOf[BlockId]
+    blockIds.foreach(blockId => {
+      val block = registeredBlocks.get(blockId)
+      if (!block.isInstanceOf[UcxPinnedBlock]) {
+        registeredBlocks.put(blockId, UcxPinnedBlock(block, pinMemory(block), prefetched = true))
+      }
     })
+  }
+
+  /**
+   * On a sender side process request of fetchBlockByBlockId
+   */
+  private[ucx] def replyFetchBlockRequest(workerId: String, workerAddress: ByteBuffer,
+                                          blockId: BlockId, tag: Long): Unit = {
+
+    val ep = clientConnections.getOrElseUpdate(workerId,
+      globalWorker.newEndpoint(new UcpEndpointParams().setUcpAddress(workerAddress))
+    )
 
     val block = registeredBlocks.get(blockId)
     if (block == null) {
@@ -189,8 +184,16 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
     lock.lock()
     val blockMemory = block.getMemoryBlock
 
+    logInfo(s"Sending $blockId of size ${blockMemory.size} to tag: $tag")
     ep.sendTaggedNonBlocking(blockMemory.address, blockMemory.size, tag, new UcxCallback {
       override def onSuccess(request: UcpRequest): Unit = {
+        if (block.isInstanceOf[UcxPinnedBlock]) {
+          val pinnedBlock = block.asInstanceOf[UcxPinnedBlock]
+          if (pinnedBlock.prefetched) {
+            registeredBlocks.put(blockId, pinnedBlock.block)
+            pinnedBlock.ucpMemory.deregister()
+          }
+        }
         lock.unlock()
       }
 
@@ -210,7 +213,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
   /**
    * Registers blocks using blockId on SERVER side.
    */
-  override def register(blockId: BlockId, block: Block) {
+  override def register(blockId: BlockId, block: Block): Unit = {
     val registeredBock: Block = if (ucxShuffleConf.pinMemory) {
       UcxPinnedBlock(block, pinMemory(block))
     } else {
@@ -228,22 +231,10 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
       register(blockId, block)
     } andThen {
       case Failure(t) => if (callback != null) {
-        callback.onComplete(new OperationResult {
-          override def getStatus: OperationStatus.Value = OperationStatus.FAILURE
-
-          override def getError: TransportError = new TransportError(t.getMessage)
-
-          override def getStats: Option[OperationStats] = None
-        })
+        callback.onComplete(new UcxFailureOperationResult(t.getMessage))
       }
       case Success(_) => if (callback != null) {
-        callback.onComplete(new OperationResult {
-          override def getStatus: OperationStatus.Value = OperationStatus.SUCCESS
-
-          override def getError: TransportError = null
-
-          override def getStats: Option[OperationStats] = None
-        })
+        callback.onComplete(new UcxSuccessOperationResult(new UcxStats))
       }
     }
   }
@@ -259,8 +250,9 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
         case b:UcxPinnedBlock => b.ucpMemory.deregister()
         case _ =>
       }
+      block.lock.writeLock().unlock()
     } else {
-      logWarning(s"No block registered for $blockId")
+      logTrace(s"No block registered for $blockId")
     }
   }
 
@@ -284,5 +276,21 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null,
    */
   override def removeExecutor(executorId: String): Unit = {
     executorIdToAddress.remove(executorId)
+  }
+
+  /**
+   * Hint for a transport that these blocks would needed soon.
+   */
+  override def prefetchBlocks(executorId: String, blockIds: Seq[BlockId]): Unit = {
+    threadLocalWorker.get().prefetchBlocks(executorId, blockIds)
+  }
+
+  /**
+   * Batch version of [[ fetchBlocksByBlockIds ]].
+   */
+  override def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
+                                     resultBuffer: Seq[MemoryBlock],
+                                     callbacks: Seq[OperationCallback]): Seq[Request] = {
+    threadLocalWorker.get().fetchBlocksByBlockIds(executorId, blockIds, resultBuffer, callbacks)
   }
 }

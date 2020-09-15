@@ -20,15 +20,17 @@ case class MemoryBlock(address: Long, size: Long, isHostMemory: Boolean = true)
  */
 trait BlockId
 
+private[ucx] sealed trait BlockLock {
+  // Private transport lock to know when there are outstanding operations to block memory.
+  private[ucx] val lock = new StampedLock().asReadWriteLock()
+}
+
 /**
  * Some block in memory, that transport registers and that would requested on a remote side.
  */
-trait Block {
+trait Block extends BlockLock {
   // Transport will call this method when it would need an actual block memory.
   def getMemoryBlock: MemoryBlock
-
-  // Private transport lock to know when there are outstanding operations to block memory.
-  private[ucx] val lock = new StampedLock().asReadWriteLock()
 }
 
 object OperationStatus extends Enumeration {
@@ -48,7 +50,7 @@ trait OperationStats {
 
   /**
    * Indicates number of valid bytes in receive memory when using
-   * [[ ShuffleTransport.fetchBlockByBlockId()]]
+   * [[ ShuffleTransport.fetchBlocksByBlockIds()]]
    */
   def recvSize: Long
 }
@@ -62,7 +64,7 @@ trait OperationResult {
 }
 
 /**
- * Request object that returns by [[ ShuffleTransport.fetchBlockByBlockId() ]] routine.
+ * Request object that returns by [[ ShuffleTransport.fetchBlocksByBlockIds() ]] routine.
  */
 trait Request {
   def isCompleted: Boolean
@@ -134,6 +136,18 @@ trait ShuffleTransport {
   def unregister(blockId: BlockId)
 
   /**
+   * Hint for a transport that these blocks would needed soon.
+   */
+  def prefetchBlocks(executorId: String, blockIds: Seq[BlockId])
+
+  /**
+   * Batch version of [[ fetchBlocksByBlockIds ]].
+   */
+  def fetchBlocksByBlockIds(executorId: String, blockIds: Seq[BlockId],
+                            resultBuffer: Seq[MemoryBlock],
+                            callbacks: Seq[OperationCallback]): Seq[Request]
+
+  /**
    * Fetch remote blocks by blockIds.
    */
   def fetchBlockByBlockId(executorId: String, blockId: BlockId,
@@ -141,10 +155,10 @@ trait ShuffleTransport {
 
   /**
    * Progress outstanding operations. This routine is blocking (though may poll for event).
-   * It's required to call this routine within same thread that submitted [[ fetchBlockByBlockId ]].
+   * It's required to call this routine within same thread that submitted [[ fetchBlocksByBlockIds ]].
    *
    * Return from this method guarantees that at least some operation was progressed.
-   * But not guaranteed that at least one [[ fetchBlockByBlockId ]] completed!
+   * But not guaranteed that at least one [[ fetchBlocksByBlockIds ]] completed!
    */
   def progress()
 }

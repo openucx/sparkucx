@@ -4,17 +4,23 @@
 */
 package org.apache.spark.shuffle.ucx.rpc
 
-import org.openucx.jucx.UcxException
+import java.io.ObjectInputStream
+
+import com.fasterxml.jackson.databind.util.ByteBufferBackedInputStream
 import org.openucx.jucx.ucp.{UcpRequest, UcpWorker}
+import org.openucx.jucx.{UcxException, UcxUtils}
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.memory.MemoryPool
+import org.apache.spark.shuffle.ucx.rpc.UcxRpcMessages.{FetchBlockByBlockIdRequest, FetchBlocksByBlockIdsRequest, PrefetchBlockIds}
 import org.apache.spark.shuffle.ucx.{MemoryBlock, UcxShuffleTransport}
+import org.apache.spark.util.Utils
 
 class GlobalWorkerRpcThread(globalWorker: UcpWorker, memPool: MemoryPool,
                             transport: UcxShuffleTransport) extends Thread with Logging {
 
   setDaemon(true)
   setName("Ucx Shuffle Transport Progress Thread")
+
 
   override def run(): Unit = {
     val numRecvs = transport.ucxShuffleConf.recvQueueSize
@@ -26,7 +32,7 @@ class GlobalWorkerRpcThread(globalWorker: UcpWorker, memPool: MemoryPool,
 
     for (i <- 0 until numRecvs) {
       requests(i) = globalWorker.recvTaggedNonBlocking(memoryBlocks(i).address, msgSize,
-        -1L, 0L, null)
+        UcxRpcMessages.WILDCARD_TAG, UcxRpcMessages.WILDCARD_TAG_MASK, null)
     }
 
     while (!isInterrupted) {
@@ -36,9 +42,41 @@ class GlobalWorkerRpcThread(globalWorker: UcpWorker, memPool: MemoryPool,
       }
       for (i <- 0 until numRecvs) {
         if (requests(i).isCompleted) {
-          transport.replyFetchBlockRequest(memoryBlocks(i))
+          val buffer = UcxUtils.getByteBufferView(memoryBlocks(i).address, msgSize.toInt)
+          val senderTag = requests(i).getSenderTag
+          if (senderTag >= 2L) {
+            // Fetch Single block
+            val msg = Utils.tryWithResource(new ByteBufferBackedInputStream(buffer)) { bin =>
+              val objIn = new ObjectInputStream(bin)
+              val obj = objIn.readObject().asInstanceOf[FetchBlockByBlockIdRequest]
+              objIn.close()
+              obj
+            }
+            transport.replyFetchBlockRequest(msg.executorId, msg.workerAddress.value, msg.blockId, senderTag)
+          } else if (senderTag < 0 ) {
+            // Batch fetch request
+            val msg = Utils.tryWithResource(new ByteBufferBackedInputStream(buffer)) { bin =>
+              val objIn = new ObjectInputStream(bin)
+              val obj = objIn.readObject().asInstanceOf[FetchBlocksByBlockIdsRequest]
+              objIn.close()
+              obj
+            }
+            for (j <- msg.blockIds.indices) {
+              transport.replyFetchBlockRequest(msg.executorId, msg.workerAddress.value, msg.blockIds(j),
+                senderTag + j)
+            }
+
+          } else if (senderTag == UcxRpcMessages.PREFETCH_TAG) {
+            val msg = Utils.tryWithResource(new ByteBufferBackedInputStream(buffer)) { bin =>
+              val objIn = new ObjectInputStream(bin)
+              val obj = objIn.readObject().asInstanceOf[PrefetchBlockIds]
+              objIn.close()
+              obj
+            }
+            transport.handlePrefetchRequest(msg.executorId, msg.workerAddress.value, msg.blockIds)
+          }
           requests(i) = globalWorker.recvTaggedNonBlocking(memoryBlocks(i).address, msgSize,
-            -1L, 0L, null)
+            UcxRpcMessages.WILDCARD_TAG, UcxRpcMessages.WILDCARD_TAG_MASK, null)
         }
       }
     }

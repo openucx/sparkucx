@@ -14,5 +14,5 @@ import org.apache.spark.shuffle.ucx.MemoryBlock
 abstract class MemoryPool extends Closeable {
   def get(size: Long): MemoryBlock
 
-  def put(mem: MemoryBlock)
+  def put(mem: MemoryBlock): Unit
 }
