@@ -12,15 +12,20 @@ import org.apache.spark.util.Utils
 class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
   private def getUcxConf(name: String) = s"spark.shuffle.ucx.$name"
 
-  private val PROTOCOL =
+  object PROTOCOL extends Enumeration {
+    val ONE_SIDED, RNDV = Value
+  }
+
+  private lazy val PROTOCOL_CONF =
     ConfigBuilder(getUcxConf("protocol"))
-      .doc("Which protocol to use: rndv (default), one-sided")
+      .doc("Which protocol to use: RNDV (default), ONE-SIDED")
       .stringConf
       .checkValue(protocol => protocol == "rndv" || protocol == "one-sided",
         "Invalid protocol. Valid options: rndv / one-sided.")
-      .createWithDefault("rndv")
+      .transform(_.toUpperCase.replace("-", "_"))
+      .createWithDefault("RNDV")
 
-  private val MEMORY_PINNING =
+  private lazy val MEMORY_PINNING =
     ConfigBuilder(getUcxConf("memoryPinning"))
       .doc("Whether to pin whole shuffle data in memory")
       .booleanConf
@@ -30,14 +35,14 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
     ConfigBuilder(getUcxConf("maxWorkerSize"))
       .doc("Maximum size of worker address in bytes")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(1000)
+      .createWithDefault(1024)
 
   lazy val RPC_MESSAGE_SIZE: ConfigEntry[Long] =
     ConfigBuilder(getUcxConf("rpcMessageSize"))
       .doc("Size of RPC message to send from fetchBlockByBlockId. Must contain ")
       .bytesConf(ByteUnit.BYTE)
       .checkValue(size => size > maxWorkerAddressSize,
-        "Rpc message must contain workerAddress")
+        "Rpc message must contain at least workerAddress")
       .createWithDefault(2000)
 
   // Memory Pool
@@ -58,6 +63,12 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
       .intConf
       .createWithDefault(5)
 
+  private lazy val USE_SOCKADDR =
+    ConfigBuilder(getUcxConf("useSockAddr"))
+      .doc("Whether to use socket address to connect executors.")
+      .booleanConf
+      .createWithDefault(true)
+
   private lazy val MIN_REGISTRATION_SIZE =
     ConfigBuilder(getUcxConf("memory.minAllocationSize"))
       .doc("Minimal memory registration size in memory pool.")
@@ -67,7 +78,14 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
   lazy val minRegistrationSize: Int = conf.getSizeAsBytes(MIN_REGISTRATION_SIZE.key,
     MIN_REGISTRATION_SIZE.defaultValueString).toInt
 
-  lazy val protocol: String = conf.get(PROTOCOL.key, PROTOCOL.defaultValueString)
+  private lazy val USE_ODP =
+    ConfigBuilder(getUcxConf("useOdp"))
+      .doc("Whether to use on demand paging feature, to avoid memory pinning")
+      .booleanConf
+      .createWithDefault(false)
+
+  lazy val protocol: PROTOCOL.Value = PROTOCOL.withName(
+    conf.get(PROTOCOL_CONF.key, PROTOCOL_CONF.defaultValueString))
 
   lazy val useOdp: Boolean = conf.getBoolean(getUcxConf("memory.useOdp"), defaultValue = false)
 
@@ -82,6 +100,8 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
   lazy val useWakeup: Boolean = conf.getBoolean(WAKEUP_FEATURE.key, WAKEUP_FEATURE.defaultValue.get)
 
   lazy val recvQueueSize: Int = conf.getInt(RECV_QUEUE_SIZE.key, RECV_QUEUE_SIZE.defaultValue.get)
+
+  lazy val useSockAddr: Boolean = conf.getBoolean(USE_SOCKADDR.key, USE_SOCKADDR.defaultValue.get)
 
   lazy val preallocateBuffersMap: Map[Long, Int] = {
     conf.get(PREALLOCATE_BUFFERS).split(",").withFilter(s => !s.isEmpty)

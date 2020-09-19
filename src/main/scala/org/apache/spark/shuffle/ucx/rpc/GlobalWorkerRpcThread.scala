@@ -21,7 +21,6 @@ class GlobalWorkerRpcThread(globalWorker: UcpWorker, memPool: MemoryPool,
   setDaemon(true)
   setName("Ucx Shuffle Transport Progress Thread")
 
-
   override def run(): Unit = {
     val numRecvs = transport.ucxShuffleConf.recvQueueSize
     val msgSize = transport.ucxShuffleConf.rpcMessageSize
@@ -36,9 +35,10 @@ class GlobalWorkerRpcThread(globalWorker: UcpWorker, memPool: MemoryPool,
     }
 
     while (!isInterrupted) {
-      if (globalWorker.progress() == 0) {
-        globalWorker.waitForEvents()
-        globalWorker.progress()
+      while (globalWorker.progress() == 0) {
+        if (transport.ucxShuffleConf.useWakeup) {
+          globalWorker.waitForEvents()
+        }
       }
       for (i <- 0 until numRecvs) {
         if (requests(i).isCompleted) {
