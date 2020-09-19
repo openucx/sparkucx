@@ -5,8 +5,8 @@ See file LICENSE for terms.
  -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                       http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.openucx</groupId>
@@ -32,14 +32,15 @@ See file LICENSE for terms.
     <maven.compiler.target>1.8</maven.compiler.target>
     <encoding>UTF-8</encoding>
     <spark.version>3.0.0</spark.version>
-    <scala.version>2.12</scala.version>
-    <jucx.version>1.9.0-SNAPSHOT</jucx.version>
+    <scala.version>2.12.12</scala.version>
+    <scala.compat.version>2.12</scala.compat.version>
+    <jucx.version>1.10.0-SNAPSHOT</jucx.version>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.version}</artifactId>
+      <artifactId>spark-core_${scala.compat.version}</artifactId>
       <version>${spark.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -47,6 +48,12 @@ See file LICENSE for terms.
       <groupId>org.openucx</groupId>
       <artifactId>jucx</artifactId>
       <version>${jucx.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.compat.version}</artifactId>
+      <version>3.2.1</version>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -80,15 +87,17 @@ See file LICENSE for terms.
         <executions>
           <execution>
             <id>compile</id>
-              <goals>
-                <goal>compile</goal>
-              </goals>
+            <goals>
+              <goal>compile</goal>
+              <goal>testCompile</goal>
+            </goals>
             <phase>compile</phase>
           </execution>
           <execution>
             <phase>process-resources</phase>
             <goals>
               <goal>compile</goal>
+              <goal>testCompile</goal>
             </goals>
           </execution>
         </executions>
@@ -107,6 +116,23 @@ See file LICENSE for terms.
             <phase>package</phase>
             <goals>
               <goal>single</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
+        <version>2.0.0</version>
+        <configuration>
+          <argLine>-Xmx1024m -Dsun.io.serialization.extendedDebugInfo=true</argLine>
+          <stdout>F</stdout>
+        </configuration>
+        <executions>
+          <execution>
+            <id>test</id>
+            <goals>
+              <goal>test</goal>
             </goals>
           </execution>
         </executions>
