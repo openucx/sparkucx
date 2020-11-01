@@ -19,7 +19,7 @@ stages:
               spark_version: "2.4.5"
             spark-3.0:
               profile_version: "3.0"
-              spark_version: "3.0.0p2"
+              spark_version: "3.0.1"
         pool:
           name: MLNX
           demands: Maven
@@ -27,7 +27,12 @@ stages:
           - task: Maven@3
             displayName:  build
             inputs:
+              javaHomeOption: "path"
+              jdkDirectory: "/hpc/local/oss/java/jdk/"
               jdkVersionOption: "1.8"
+              mavenVersionSelection: "Path"
+              mavenPath: "/hpc/local/oss/apache-maven-3.3.9"
+              mavenSetM2Home: true
               publishJUnitResults: false
               goals: "package"
               options: "-B  -Dmaven.repo.local=$(System.DefaultWorkingDirectory)/target/.deps -Dorg.slf4j.simpleLogger.log.org.apache.maven.cli.transfer.Slf4jMavenTransferListener=warn -Pspark-$(profile_version)"

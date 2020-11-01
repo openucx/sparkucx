@@ -131,7 +131,7 @@ public class UcxNode implements Closeable {
     // 1. Executor: connect to driver using sockaddr
     // and send it's worker address followed by BlockManagerID.
     globalDriverEndpoint = globalWorker.newEndpoint(
-      new UcpEndpointParams().setSocketAddress(driverAddress).setPeerErrorHadnlingMode()
+      new UcpEndpointParams().setSocketAddress(driverAddress).setPeerErrorHandlingMode()
     );
 
     RegisteredMemory metadataMemory = buildMetadataBuffer();
