@@ -64,9 +64,11 @@ abstract class CommonUcxShuffleManager(val conf: SparkConf, isDriver: Boolean) e
   /**
    * Atomically starts UcxNode singleton - one for all shuffle threads.
    */
-  def startUcxNodeIfMissing(): Unit = synchronized {
-    if (ucxNode == null) {
-      ucxNode = new UcxNode(ucxShuffleConf, isDriver)
+  def startUcxNodeIfMissing(): Unit = if (ucxNode == null) {
+    synchronized {
+      if (ucxNode == null) {
+        ucxNode = new UcxNode(ucxShuffleConf, isDriver)
+      }
     }
   }
 

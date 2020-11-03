@@ -127,14 +127,14 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
   }
 
   def getConnection(blockManagerId: BlockManagerId): UcpEndpoint = {
-    val workerAdresses = UcxNode.getWorkerAddresses
+    val workerAddresses = UcxNode.getWorkerAddresses
     // Block untill there's no worker address for this BlockManagerID
     val startTime = System.currentTimeMillis()
     val timeout = conf.getTimeAsMs("spark.network.timeout", "100")
-    if (workerAdresses.get(blockManagerId) == null) {
-      workerAdresses.synchronized {
-        while (workerAdresses.get(blockManagerId) == null) {
-          workerAdresses.wait(timeout)
+    if (workerAddresses.get(blockManagerId) == null) {
+      workerAddresses.synchronized {
+        while (workerAddresses.get(blockManagerId) == null) {
+          workerAddresses.wait(timeout)
           if (System.currentTimeMillis() - startTime > timeout) {
             throw new UcxException(s"Didn't get worker address for $blockManagerId during $timeout")
           }
@@ -146,7 +146,7 @@ class UcxWorkerWrapper(val worker: UcpWorker, val conf: UcxShuffleConf, val id: 
       logInfo(s"Worker $id connecting to $blockManagerId")
       val endpointParams = new UcpEndpointParams()
         .setPeerErrorHandlingMode()
-        .setUcpAddress(workerAdresses.get(blockManagerId))
+        .setUcpAddress(workerAddresses.get(blockManagerId))
      worker.newEndpoint(endpointParams)
     })
   }
