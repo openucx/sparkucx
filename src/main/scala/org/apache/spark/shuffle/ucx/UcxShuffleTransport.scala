@@ -153,7 +153,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, val executo
   private[ucx] def handlePrefetchRequest(workerId: String, workerAddress: ByteBuffer,
                                          blockIds: Seq[BlockId]) {
 
-    logInfo(s"Prefetching blocks: ${blockIds.mkString(",")}")
+    logDebug(s"Prefetching blocks: ${blockIds.mkString(",")}")
     clientConnections.getOrElseUpdate(workerId,
       globalWorker.newEndpoint(new UcpEndpointParams().setUcpAddress(workerAddress))
     )
@@ -184,7 +184,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, val executo
     lock.lock()
     val blockMemory = block.getMemoryBlock
 
-    logInfo(s"Sending $blockId of size ${blockMemory.size} to tag: $tag")
+    logDebug(s"Sending $blockId of size ${blockMemory.size} to tag: $tag")
     ep.sendTaggedNonBlocking(blockMemory.address, blockMemory.size, tag, new UcxCallback {
       override def onSuccess(request: UcpRequest): Unit = {
         if (block.isInstanceOf[UcxPinnedBlock]) {
