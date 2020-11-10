@@ -110,12 +110,12 @@ public class UcxNode implements Closeable {
    */
   private RegisteredMemory buildMetadataBuffer() {
     BlockManagerId blockManagerId = SparkEnv.get().blockManager().blockManagerId();
-    ByteBuffer workerAddresss = globalWorker.getAddress();
+    ByteBuffer workerAddresses = globalWorker.getAddress();
 
     RegisteredMemory metadataMemory = memoryPool.get(conf.metadataRPCBufferSize());
     ByteBuffer metadataBuffer = metadataMemory.getBuffer();
-    metadataBuffer.putInt(workerAddresss.capacity());
-    metadataBuffer.put(workerAddresss);
+    metadataBuffer.putInt(workerAddresses.capacity());
+    metadataBuffer.put(workerAddresses);
     try {
       SerializableBlockManagerID.serializeBlockManagerID(blockManagerId, metadataBuffer);
     } catch (IOException e) {
