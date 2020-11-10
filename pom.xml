@@ -36,9 +36,6 @@ See file LICENSE for terms.
   <profiles>
     <profile>
       <id>spark-2.4</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <properties>
         <spark.version>2.4.0</spark.version>
         <project.excludes>**/spark_3_0/**</project.excludes>
@@ -49,8 +46,11 @@ See file LICENSE for terms.
     </profile>
     <profile>
       <id>spark-3.0</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
       <properties>
-        <spark.version>3.0.0-preview2</spark.version>
+        <spark.version>3.0.1</spark.version>
         <scala.version>2.12.10</scala.version>
         <scala.compat.version>2.12</scala.compat.version>
         <project.excludes>**/spark_2_4/**</project.excludes>
@@ -70,7 +70,7 @@ See file LICENSE for terms.
     <dependency>
       <groupId>org.openucx</groupId>
       <artifactId>jucx</artifactId>
-      <version>1.8.0</version>
+      <version>1.9.0</version>
     </dependency>
   </dependencies>
 

@@ -70,7 +70,7 @@ public class RpcConnectionCallback extends UcxCallback {
     if (isDriver) {
       metadataBuffer.clear();
       UcpEndpoint newConnection = globalWorker.newEndpoint(
-        new UcpEndpointParams().setPeerErrorHadnlingMode()
+        new UcpEndpointParams().setPeerErrorHandlingMode()
           .setUcpAddress(workerAddress));
       // For each existing connection
       rpcConnections.forEach((connection, connectionMetadata) -> {
