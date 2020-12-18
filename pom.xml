@@ -58,7 +58,7 @@ See file LICENSE for terms.
   </dependencies>
 
   <build>
-    <finalName>${project.artifactId}-${project.version}-for-spark-${spark.version}</finalName>
+    <finalName>${project.artifactId}-${project.version}-for-spark-3.0</finalName>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
