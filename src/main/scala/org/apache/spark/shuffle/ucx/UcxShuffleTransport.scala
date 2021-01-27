@@ -17,7 +17,7 @@ import org.openucx.jucx.{UcxCallback, UcxException}
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle.ucx.memory.{MemoryPool, UcxHostBounceBuffersPool}
-import org.apache.spark.shuffle.ucx.rpc.GlobalWorkerRpcThread
+import org.apache.spark.shuffle.ucx.rpc.{GlobalWorkerRpcThread, UcxRpcMessages}
 import org.apache.spark.shuffle.ucx.utils.{SerializationUtils, UcxHelperUtils}
 import org.apache.spark.util.Utils
 
@@ -50,13 +50,18 @@ class UcxStats extends OperationStats {
   override def recvSize: Long = receiveSize
 }
 
-class UcxRequest(request: UcpRequest, stats: OperationStats) extends Request {
+class UcxRequest(private var request: UcpRequest, stats: OperationStats, private val worker: UcpWorker)
+  extends Request {
 
-  override def isCompleted: Boolean = request.isCompleted
+  override def isCompleted: Boolean = (request != null) && request.isCompleted
 
-  override def cancel(): Unit = request.close()
+  override def cancel(): Unit = if (request != null) worker.cancelRequest(request)
 
   override def getStats: Option[OperationStats] = Some(stats)
+
+  private[ucx] def setRequest(request: UcpRequest) = {
+    this.request = request
+  }
 }
 
 /**
@@ -104,7 +109,7 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, var executo
         memMapParams.nonBlocking()
       }
 
-      val params = new UcpParams().requestTagFeature()
+      val params = new UcpParams().requestTagFeature().requestAmFeature()
 
       if (ucxShuffleConf.useWakeup) {
         params.requestWakeupFeature()
@@ -207,21 +212,8 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, var executo
   /**
    * On a sender side process request of fetchBlockByBlockId
    */
-  private[ucx] def replyFetchBlockRequest(workerId: String, workerAddress: ByteBuffer,
-                                          blockId: BlockId, tag: Long): Unit = {
-    val ep = clientConnections.getOrElseUpdate(workerId, {
-      val epParams = new UcpEndpointParams()
-      if (ucxShuffleConf.useSockAddr) {
-        epParams.setPeerErrorHandlingMode().setSocketAddress(
-          SerializationUtils.deserializeInetAddress(workerAddress))
-      } else {
-        epParams.setUcpAddress(workerAddress)
-      }
-      globalWorker.newEndpoint(epParams)
-    }
-
-    )
-
+  private[ucx] def replyFetchBlockRequest(blockId: BlockId, ep: UcpEndpoint,
+                                          replyTag: Int = UcxRpcMessages.FETCH_SINGLE_BLOCK_TAG): Unit = {
     val block = registeredBlocks.get(blockId)
     if (block == null) {
       throw new UcxException(s"Block $blockId not registered")
@@ -230,33 +222,37 @@ class UcxShuffleTransport(var ucxShuffleConf: UcxShuffleConf = null, var executo
     lock.lock()
     val blockMemory = block.getMemoryBlock
 
-    logInfo(s"Sending $blockId of size ${blockMemory.size} to $workerId tag: $tag")
-    ep.sendTaggedNonBlocking(blockMemory.address, blockMemory.size, tag, new UcxCallback {
-      private val startTime = System.nanoTime()
-      override def onSuccess(request: UcpRequest): Unit = {
-        logInfo(s"Sent $blockId of size ${blockMemory.size} to $workerId " +
-          s"tag: $tag in ${Utils.getUsedTimeNs(startTime)}")
-        if (block.isInstanceOf[UcxPinnedBlock]) {
-          val pinnedBlock = block.asInstanceOf[UcxPinnedBlock]
-          if (pinnedBlock.prefetched) {
-            registeredBlocks.put(blockId, pinnedBlock.block)
-            pinnedBlock.ucpMemory.deregister()
+    logInfo(s"Sending $blockId of size ${blockMemory.size}")
+    ep.sendAmNonBlocking(replyTag, 0l, 0l, blockMemory.address, blockMemory.size,
+      UcpConstants.UCP_AM_SEND_FLAG_RNDV,  new UcxCallback {
+        private val startTime = System.nanoTime()
+        override def onSuccess(request: UcpRequest): Unit = {
+          logInfo(s"Sent $blockId of size ${blockMemory.size}" +
+            s" in ${Utils.getUsedTimeNs(startTime)}")
+          if (block.isInstanceOf[UcxPinnedBlock]) {
+            val pinnedBlock = block.asInstanceOf[UcxPinnedBlock]
+            if (pinnedBlock.prefetched) {
+              registeredBlocks.put(blockId, pinnedBlock.block)
+              pinnedBlock.ucpMemory.deregister()
+            }
           }
+          lock.unlock()
         }
-        lock.unlock()
-      }
 
-      override def onError(ucsStatus: Int, errorMsg: String): Unit = {
-        logError(s"Failed to send $blockId: $errorMsg")
-        lock.unlock()
-      }
-    })
+        override def onError(ucsStatus: Int, errorMsg: String): Unit = {
+          logError(s"Failed to send $blockId: $errorMsg")
+          lock.unlock()
+        }
+      } )
   }
 
   private def pinMemory(block: Block): UcpMemory = {
+    val startTime = System.nanoTime()
     val blockMemory = block.getMemoryBlock
-    ucxContext.memoryMap(
+    val result = ucxContext.memoryMap(
       memMapParams.setAddress(blockMemory.address).setLength(blockMemory.size))
+    logInfo(s"Pinning memory of size: ${blockMemory.size} took: ${Utils.getUsedTimeNs(startTime)}")
+    result
   }
 
   /**

@@ -10,9 +10,9 @@ import org.apache.spark.shuffle.ucx.utils.SerializableDirectBuffer
 
 object UcxRpcMessages {
 
-  val PREFETCH_TAG = 1L
-  val WILDCARD_TAG = -1L
-  val WILDCARD_TAG_MASK = 0L
+  val PREFETCH_TAG = 1
+  val FETCH_SINGLE_BLOCK_TAG = 2
+  val FETCH_MULTIPLE_BLOCKS_TAG = 3
 
   /**
    * Called from executor to driver, to introduce ucx worker address.
@@ -27,13 +27,9 @@ object UcxRpcMessages {
   case class IntroduceAllExecutors(executorIds: Seq[String],
                                    ucxWorkerAddresses: Seq[SerializableDirectBuffer])
 
-  case class FetchBlockByBlockIdRequest(executorId: String, workerAddress: SerializableDirectBuffer,
-                                       blockId: BlockId)
+  case class FetchBlockByBlockIdRequest(msgId: Int, blockId: BlockId)
 
-  case class FetchBlocksByBlockIdsRequest(executorId: String,
-                                          workerAddress: SerializableDirectBuffer,
-                                          blockIds: Seq[BlockId])
+  case class FetchBlocksByBlockIdsRequest(startTag: Int, blockIds: Seq[BlockId])
 
-  case class PrefetchBlockIds(executorId: String, workerAddress: SerializableDirectBuffer,
-                              blockIds: Seq[BlockId])
+  case class PrefetchBlockIds(blockIds: Seq[BlockId])
 }

@@ -34,7 +34,7 @@ See file LICENSE for terms.
     <spark.version>3.0.0</spark.version>
     <scala.version>2.12.12</scala.version>
     <scala.compat.version>2.12</scala.compat.version>
-    <jucx.version>1.10.0-SNAPSHOT</jucx.version>
+    <jucx.version>1.11.1-SNAPSHOT</jucx.version>
   </properties>
 
   <dependencies>

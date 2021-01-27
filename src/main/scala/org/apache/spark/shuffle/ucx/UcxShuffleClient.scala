@@ -24,20 +24,12 @@ class UcxShuffleClient(transport: UcxShuffleTransport,
     .withFilter { case (blockManagerId, _) => blockManagerId != SparkEnv.get.blockManager.blockManagerId }
     .flatMap {
     case (blockManagerId, blocks) =>
-      val blockIds = blocks.map {
-        case (blockId, _, _) =>
-          val sparkBlockId = blockId.asInstanceOf[ShuffleBlockId]
-          UcxShuffleBlockId(sparkBlockId.shuffleId, sparkBlockId.mapId, sparkBlockId.reduceId)
-      }
-      if (!transport.ucxShuffleConf.pinMemory) {
-        transport.prefetchBlocks(blockManagerId.executorId, blockIds)
-      }
       blocks.map {
         case (blockId, length, _) =>
           if (length > accurateThreshold) {
             (blockId, (length * 1.2).toLong)
           } else {
-            (blockId, accurateThreshold)
+            (blockId, accurateThreshold * 2)
           }
       }
   }.toMap

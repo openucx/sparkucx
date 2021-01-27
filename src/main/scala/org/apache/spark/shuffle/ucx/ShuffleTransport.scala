@@ -151,7 +151,7 @@ trait ShuffleTransport {
    * Fetch remote blocks by blockIds.
    */
   def fetchBlockByBlockId(executorId: String, blockId: BlockId,
-                          resultBuffer: MemoryBlock, cb: OperationCallback): Request
+                          resultBufferAllocator: MemoryBlock, cb: OperationCallback): Request
 
   /**
    * Progress outstanding operations. This routine is blocking (though may poll for event).
