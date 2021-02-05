@@ -6,13 +6,17 @@ package org.apache.spark.shuffle.ucx.perf
 
 import java.net.{InetAddress, InetSocketAddress, ServerSocket, Socket}
 import java.nio.ByteBuffer
-import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
 import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 
+import ai.rapids.cudf.DeviceMemoryBuffer
 import org.apache.commons.cli.{GnuParser, HelpFormatter, Options}
+import org.openucx.jucx.UcxUtils
+import org.openucx.jucx.ucp.UcpMemMapParams
+import org.openucx.jucx.ucs.UcsConstants
 import org.apache.spark.SparkConf
 import org.apache.spark.shuffle.ucx._
 import org.apache.spark.shuffle.ucx.memory.MemoryPool
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.util.Utils
 
 object UcxShuffleTransportPerfTool {
@@ -24,16 +28,17 @@ object UcxShuffleTransportPerfTool {
   private val ITER_OPTION = "i"
   private val MEMORY_TYPE_OPTION = "m"
   private val NUM_THREADS_OPTION = "t"
+  private val REUSE_ADDRESS_OPTION = "r"
 
   private val ucxShuffleConf = new UcxShuffleConf(new SparkConf())
   private val transport = new UcxShuffleTransport(ucxShuffleConf, "e")
   private val workerAddress = transport.init()
-  private var memoryPool: MemoryPool = transport.memoryPool
+  private var memoryPool: MemoryPool = transport.hostMemoryPool
 
   case class TestBlockId(id: Int) extends BlockId
 
   case class PerfOptions(remoteAddress: InetSocketAddress, numBlocks: Int, blockSize: Long,
-                         serverPort: Int, numIterations: Int, numThreads: Int)
+                         serverPort: Int, numIterations: Int, numThreads: Int, memoryType: Int)
 
   private def initOptions(): Options = {
     val options = new Options()
@@ -78,28 +83,50 @@ object UcxShuffleTransportPerfTool {
 
     val threadsNumber = Integer.parseInt(cmd.getOptionValue(NUM_THREADS_OPTION, "1"))
 
+    var memoryType = UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST
     if (cmd.hasOption(MEMORY_TYPE_OPTION) && cmd.getOptionValue(MEMORY_TYPE_OPTION) == "cuda") {
-      val className = "org.apache.spark.shuffle.ucx.GpuMemoryPool"
-      val cls = Utils.classForName(className)
-      memoryPool = cls.getConstructor().newInstance().asInstanceOf[MemoryPool]
+      memoryPool = transport.deviceMemoryPool
+      memoryType = UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA
     }
 
     PerfOptions(inetAddress,
       Integer.parseInt(cmd.getOptionValue(NUM_BLOCKS_OPTION, "1")),
       Utils.byteStringAsBytes(cmd.getOptionValue(SIZE_OPTION, "4m")),
-      serverPort, numIterations, threadsNumber)
+      serverPort, numIterations, threadsNumber, memoryType)
   }
 
   private def startServer(perfOptions: PerfOptions): Unit = {
-    val blocks: Seq[Block] = (0 until perfOptions.numBlocks).map { _ =>
-      val block = memoryPool.get(perfOptions.blockSize)
-      new Block {
-        override def getMemoryBlock: MemoryBlock =
-          block
+    val blocks: Seq[Block] = (0 until perfOptions.numBlocks * perfOptions.numThreads).map { _ =>
+      if (ucxShuffleConf.pinMemory) {
+        val block = memoryPool.get(perfOptions.blockSize)
+        new Block {
+          override def getMemoryBlock: MemoryBlock =
+            block
+        }
+      } else if (perfOptions.memoryType == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
+        new Block {
+          var oldBlock: DeviceMemoryBuffer = _
+          override def getMemoryBlock: MemoryBlock = {
+            if (oldBlock != null) {
+              oldBlock.close()
+            }
+            val block = DeviceMemoryBuffer.allocate(perfOptions.blockSize)
+            oldBlock = block
+            MemoryBlock(block.getAddress, block.getLength, isHostMemory = false)
+          }
+        }
+      } else {
+        new Block {
+          override def getMemoryBlock: MemoryBlock = {
+            val buf = ByteBuffer.allocateDirect(perfOptions.blockSize.toInt)
+            MemoryBlock(UcxUtils.getAddress(buf), perfOptions.blockSize)
+          }
+        }
       }
+
     }
 
-    val blockIds = (0 until perfOptions.numBlocks).map(i => TestBlockId(i))
+    val blockIds = (0 until perfOptions.numBlocks * perfOptions.numThreads).map(i => TestBlockId(i))
     blockIds.zip(blocks).foreach {
       case (blockId, block) => transport.register(blockId, block)
     }
@@ -147,58 +174,74 @@ object UcxShuffleTransportPerfTool {
 
     transport.addExecutor(executorId, workerAddress)
 
-    val resultSize = perfOptions.numBlocks * perfOptions.blockSize
+    val resultSize = perfOptions.numThreads * perfOptions.numBlocks * perfOptions.blockSize
     val resultMemory = memoryPool.get(resultSize)
-
-    val blockIds = (0 until perfOptions.numBlocks).map(i => TestBlockId(i))
+    transport.register(TestBlockId(-1), new Block {
+      override def getMemoryBlock: MemoryBlock = resultMemory
+    })
 
     val threadPool =  Executors.newFixedThreadPool(perfOptions.numThreads)
 
     for (i <- 1 to perfOptions.numIterations) {
-      val elapsedTime = new AtomicLong(0)
+      val startTime = System.nanoTime()
       val countDownLatch = new CountDownLatch(perfOptions.numThreads)
-
-      for (_ <- 0 until perfOptions.numThreads) {
+      val deviceMemoryBuffers: Array[DeviceMemoryBuffer] = new Array(perfOptions.numThreads * perfOptions.numBlocks)
+      for (tid <- 0 until perfOptions.numThreads) {
         threadPool.execute(() => {
-          val completed = new AtomicInteger(0)
+          val blocksOffset = tid * perfOptions.numBlocks
+          val blockIds = (blocksOffset until blocksOffset + perfOptions.numBlocks).map(i => TestBlockId(i))
 
           val mem = new Array[MemoryBlock](perfOptions.numBlocks)
-          val callbacks = new Array[OperationCallback](perfOptions.numBlocks)
 
           for (j <- 0 until perfOptions.numBlocks) {
-            mem(j) = MemoryBlock(resultMemory.address + j * perfOptions.blockSize, perfOptions.blockSize)
-            callbacks(j) = (result: OperationResult) => {
-              elapsedTime.addAndGet(result.getStats.get.getElapsedTimeNs)
-              completed.incrementAndGet()
+            mem(j) = MemoryBlock(resultMemory.address +
+              (tid * perfOptions.numBlocks * perfOptions.blockSize) + j * perfOptions.blockSize, perfOptions.blockSize)
+
+            if (!ucxShuffleConf.pinMemory && perfOptions.memoryType == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_HOST) {
+              val buffer = Platform.allocateDirectBuffer(perfOptions.blockSize.toInt)
+              mem(j) = MemoryBlock(UcxUtils.getAddress(buffer), perfOptions.blockSize)
+            } else if (!ucxShuffleConf.pinMemory &&
+              perfOptions.memoryType == UcsConstants.MEMORY_TYPE.UCS_MEMORY_TYPE_CUDA) {
+              val buffer = DeviceMemoryBuffer.allocate(perfOptions.blockSize)
+              deviceMemoryBuffers(tid * perfOptions.numBlocks + j) = buffer
+              mem(j) = MemoryBlock(buffer.getAddress, buffer.getLength, isHostMemory = false)
+            } else {
+              mem(j) = MemoryBlock(resultMemory.address +
+                (tid * perfOptions.numBlocks * perfOptions.blockSize) + j * perfOptions.blockSize, perfOptions.blockSize)
             }
           }
 
-          transport.fetchBlocksByBlockIds(executorId, blockIds, mem, callbacks)
+          val requests = transport.fetchBlocksByBlockIds(executorId, blockIds, mem, Seq.empty[OperationCallback])
 
-          while (completed.get() != perfOptions.numBlocks) {
+          while (!requests.forall(_.isCompleted)) {
             transport.progress()
           }
+
           countDownLatch.countDown()
         })
       }
 
       countDownLatch.await()
+      val elapsedTime = System.nanoTime() - startTime
 
-      val totalTime  = if (elapsedTime.get() < TimeUnit.MILLISECONDS.toNanos(1)) {
+      deviceMemoryBuffers.foreach(d => if (d != null) d.close())
+      val totalTime  = if (elapsedTime < TimeUnit.MILLISECONDS.toNanos(1)) {
         s"$elapsedTime ns"
       } else {
-        s"${TimeUnit.NANOSECONDS.toMillis(elapsedTime.get())} ms"
+        s"${TimeUnit.NANOSECONDS.toMillis(elapsedTime)} ms"
       }
-      val throughput: Double = (resultSize * perfOptions.numThreads / 1024.0D / 1024.0D / 1024.0D) /
-        (elapsedTime.get() / 1e9D)
+      val throughput: Double = (resultSize / 1024.0D / 1024.0D / 1024.0D) /
+        (elapsedTime / 1e9D)
 
-      println(f"${s"[$i/${perfOptions.numIterations}]"}%12s" +
-        s" numBlocks: ${perfOptions.numBlocks}" +
-        s" numThreads: ${perfOptions.numThreads}" +
-        s" size: ${Utils.bytesToString(perfOptions.blockSize)}," +
-        s" total size: ${Utils.bytesToString(resultSize * perfOptions.numThreads)}," +
-        f" time: $totalTime%3s" +
-        f" throughput: $throughput%.5f GB/s")
+      if ((i % 100 == 0) || i == perfOptions.numIterations) {
+        println(f"${s"[$i/${perfOptions.numIterations}]"}%12s" +
+          s" numBlocks: ${perfOptions.numBlocks}" +
+          s" numThreads: ${perfOptions.numThreads}" +
+          s" size: ${Utils.bytesToString(perfOptions.blockSize)}," +
+          s" total size: ${Utils.bytesToString(resultSize * perfOptions.numThreads)}," +
+          f" time: $totalTime%3s" +
+          f" throughput: $throughput%.5f GB/s")
+      }
     }
 
     val out = socket.getOutputStream
@@ -207,8 +250,10 @@ object UcxShuffleTransportPerfTool {
     out.close()
     socket.close()
 
+    transport.unregister(TestBlockId(-1))
     memoryPool.put(resultMemory)
     transport.close()
+    threadPool.shutdown()
   }
 
   def main(args: Array[String]): Unit = {

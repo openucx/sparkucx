@@ -5,7 +5,7 @@
 package org.apache.spark.shuffle.ucx
 
 import java.io.File
-import java.nio.{ByteBuffer, MappedByteBuffer}
+import java.nio.ByteBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.StandardOpenOption
 import java.util.concurrent.ConcurrentHashMap

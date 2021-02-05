@@ -37,14 +37,6 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1024)
 
-  lazy val RPC_MESSAGE_SIZE: ConfigEntry[Long] =
-    ConfigBuilder(getUcxConf("rpcMessageSize"))
-      .doc("Size of RPC message to send from fetchBlockByBlockId. Must contain ")
-      .bytesConf(ByteUnit.BYTE)
-      .checkValue(size => size > maxWorkerAddressSize,
-        "Rpc message must contain at least workerAddress")
-      .createWithDefault(2000)
-
   // Memory Pool
   private lazy val PREALLOCATE_BUFFERS =
     ConfigBuilder(getUcxConf("memory.preAllocateBuffers"))
@@ -56,12 +48,6 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
       .doc("Whether to use busy polling for workers")
       .booleanConf
       .createWithDefault(false)
-
-  private lazy val RECV_QUEUE_SIZE =
-    ConfigBuilder(getUcxConf("recvQueueSize"))
-      .doc("The number of submitted receive requests.")
-      .intConf
-      .createWithDefault(5)
 
   private lazy val USE_SOCKADDR =
     ConfigBuilder(getUcxConf("useSockAddr"))
@@ -87,24 +73,23 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
   lazy val protocol: PROTOCOL.Value = PROTOCOL.withName(
     conf.get(PROTOCOL_CONF.key, PROTOCOL_CONF.defaultValueString))
 
-  lazy val useOdp: Boolean = conf.getBoolean(getUcxConf("memory.useOdp"), defaultValue = false)
+  lazy val useOdp: Boolean = conf.getBoolean(USE_ODP.key, USE_ODP.defaultValue.get)
 
   lazy val pinMemory: Boolean = conf.getBoolean(MEMORY_PINNING.key, MEMORY_PINNING.defaultValue.get)
 
   lazy val maxWorkerAddressSize: Long = conf.getSizeAsBytes(WORKER_ADDRESS_SIZE.key,
     WORKER_ADDRESS_SIZE.defaultValueString)
 
-  lazy val rpcMessageSize: Long = conf.getSizeAsBytes(RPC_MESSAGE_SIZE.key,
-    RPC_MESSAGE_SIZE.defaultValueString)
+  lazy val maxMetadataSize: Long = conf.getSizeAsBytes("spark.rapids.shuffle.maxMetadataSize",
+    "1024")
+
 
   lazy val useWakeup: Boolean = conf.getBoolean(WAKEUP_FEATURE.key, WAKEUP_FEATURE.defaultValue.get)
-
-  lazy val recvQueueSize: Int = conf.getInt(RECV_QUEUE_SIZE.key, RECV_QUEUE_SIZE.defaultValue.get)
 
   lazy val useSockAddr: Boolean = conf.getBoolean(USE_SOCKADDR.key, USE_SOCKADDR.defaultValue.get)
 
   lazy val preallocateBuffersMap: Map[Long, Int] = {
-    conf.get(PREALLOCATE_BUFFERS).split(",").withFilter(s => !s.isEmpty)
+    conf.get(PREALLOCATE_BUFFERS.key, "").split(",").withFilter(s => s.nonEmpty)
       .map(entry => entry.split(":") match {
         case Array(bufferSize, bufferCount) =>
           (Utils.byteStringAsBytes(bufferSize.trim), bufferCount.toInt)

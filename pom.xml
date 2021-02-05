@@ -34,8 +34,8 @@ See file LICENSE for terms.
     <spark.version>3.0.0</spark.version>
     <scala.version>2.12.12</scala.version>
     <scala.compat.version>2.12</scala.compat.version>
-    <jucx.version>1.11.1-SNAPSHOT</jucx.version>
-    <cudf.version>0.16</cudf.version>
+    <jucx.version>1.11.0-rc3</jucx.version>
+    <cudf.version>0.18.1</cudf.version>
   </properties>
 
   <dependencies>
@@ -60,7 +60,7 @@ See file LICENSE for terms.
       <groupId>ai.rapids</groupId>
       <artifactId>cudf</artifactId>
       <version>${cudf.version}</version>
-      <scope>test</scope>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 
@@ -71,17 +71,19 @@ See file LICENSE for terms.
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <version>3.8.1</version>
-        <configuration>
-          <source>1.8</source>
-          <target>1.8</target>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
-        <version>4.4.0</version>
+        <version>4.4.1</version>
         <configuration>
           <recompileMode>all</recompileMode>
+          <javacArgs>
+            <javacArg>-source</javacArg>
+            <javacArg>${maven.compiler.source}</javacArg>
+            <javacArg>-target</javacArg>
+            <javacArg>${maven.compiler.target}</javacArg>
+          </javacArgs>
           <args>
             <arg>-Xexperimental</arg>
             <arg>-Xfatal-warnings</arg>

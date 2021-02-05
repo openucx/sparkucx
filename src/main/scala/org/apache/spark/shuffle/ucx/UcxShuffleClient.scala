@@ -45,7 +45,7 @@ class UcxShuffleClient(transport: UcxShuffleTransport,
       if (!blockSizes.contains(blockId)) {
         throw new UcxException(s"No $blockId found in MapOutput blocks: ${blockSizes.keys.mkString(",")}")
       }
-      val resultMemory = transport.memoryPool.get(blockSizes(blockId))
+      val resultMemory = transport.hostMemoryPool.get(blockSizes(blockId))
       ucxBlockIds(i) = UcxShuffleBlockId(blockId.shuffleId, blockId.mapId, blockId.reduceId)
       memoryBlocks(i) = MemoryBlock(resultMemory.address, blockSizes(blockId))
       callbacks(i) =  (result: OperationResult) => {
@@ -57,14 +57,14 @@ class UcxShuffleClient(transport: UcxShuffleTransport,
           val buffer = UcxUtils.getByteBufferView(resultMemory.address, result.getStats.get.recvSize.toInt)
           listener.onBlockFetchSuccess(blockIds(i), new NioManagedBuffer(buffer) {
             override def release: ManagedBuffer = {
-              transport.memoryPool.put(resultMemory)
+              transport.hostMemoryPool.put(resultMemory)
               this
             }
           })
         } else {
           logError(s"Error fetching block $blockId of size ${blockSizes(blockId)}:" +
             s" ${result.getError.getMessage}")
-          throw new UcxException(result.getError.getMessage)
+          listener.onBlockFetchFailure(blockIds(i), new UcxException(result.getError.getMessage))
         }
       }
     }
