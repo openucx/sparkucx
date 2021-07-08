@@ -5,11 +5,12 @@
 package org.apache.spark.shuffle.ucx.utils
 
 import java.io.{EOFException, ObjectInputStream, ObjectOutputStream}
+import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.Channels
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * A wrapper around a java.nio.ByteBuffer that is serializable through Java serialization, to make
@@ -62,5 +63,30 @@ class DeserializableToExternalMemoryBuffer(@transient var buffer: ByteBuffer)() 
       amountRead += ret
     }
     buffer.rewind() // Allow us to read it later
+  }
+}
+
+
+object SerializationUtils {
+
+  def deserializeInetAddress(workerAddress: ByteBuffer): InetSocketAddress = {
+    workerAddress.rewind()
+    Utils.tryWithResource(new ByteBufferInputStream(workerAddress)) { bin =>
+      val objIn = new ObjectInputStream(bin)
+      val obj = objIn.readObject().asInstanceOf[InetSocketAddress]
+      objIn.close()
+      obj
+    }
+  }
+
+  def serializeInetAddress(address: InetSocketAddress): ByteBuffer = {
+    val hostAddress = new InetSocketAddress(Utils.localCanonicalHostName(), address.getPort)
+    Utils.tryWithResource(new ByteBufferOutputStream(100)) {bos =>
+      val out = new ObjectOutputStream(bos)
+      out.writeObject(hostAddress)
+      out.flush()
+      out.close()
+      bos.toByteBuffer
+    }
   }
 }

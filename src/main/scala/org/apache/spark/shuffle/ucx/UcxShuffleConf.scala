@@ -12,15 +12,20 @@ import org.apache.spark.util.Utils
 class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
   private def getUcxConf(name: String) = s"spark.shuffle.ucx.$name"
 
-  private val PROTOCOL =
+  object PROTOCOL extends Enumeration {
+    val ONE_SIDED, RNDV = Value
+  }
+
+  private lazy val PROTOCOL_CONF =
     ConfigBuilder(getUcxConf("protocol"))
-      .doc("Which protocol to use: rndv (default), one-sided")
+      .doc("Which protocol to use: RNDV (default), ONE-SIDED")
       .stringConf
       .checkValue(protocol => protocol == "rndv" || protocol == "one-sided",
         "Invalid protocol. Valid options: rndv / one-sided.")
-      .createWithDefault("rndv")
+      .transform(_.toUpperCase.replace("-", "_"))
+      .createWithDefault("RNDV")
 
-  private val MEMORY_PINNING =
+  private lazy val MEMORY_PINNING =
     ConfigBuilder(getUcxConf("memoryPinning"))
       .doc("Whether to pin whole shuffle data in memory")
       .booleanConf
@@ -30,15 +35,7 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
     ConfigBuilder(getUcxConf("maxWorkerSize"))
       .doc("Maximum size of worker address in bytes")
       .bytesConf(ByteUnit.BYTE)
-      .createWithDefault(1000)
-
-  lazy val RPC_MESSAGE_SIZE: ConfigEntry[Long] =
-    ConfigBuilder(getUcxConf("rpcMessageSize"))
-      .doc("Size of RPC message to send from fetchBlockByBlockId. Must contain ")
-      .bytesConf(ByteUnit.BYTE)
-      .checkValue(size => size > maxWorkerAddressSize,
-        "Rpc message must contain workerAddress")
-      .createWithDefault(2000)
+      .createWithDefault(1024)
 
   // Memory Pool
   private lazy val PREALLOCATE_BUFFERS =
@@ -52,11 +49,11 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
       .booleanConf
       .createWithDefault(false)
 
-  private lazy val RECV_QUEUE_SIZE =
-    ConfigBuilder(getUcxConf("recvQueueSize"))
-      .doc("The number of submitted receive requests.")
-      .intConf
-      .createWithDefault(5)
+  private lazy val USE_SOCKADDR =
+    ConfigBuilder(getUcxConf("useSockAddr"))
+      .doc("Whether to use socket address to connect executors.")
+      .booleanConf
+      .createWithDefault(true)
 
   private lazy val MIN_REGISTRATION_SIZE =
     ConfigBuilder(getUcxConf("memory.minAllocationSize"))
@@ -67,24 +64,32 @@ class UcxShuffleConf(val conf: SparkConf) extends SparkConf {
   lazy val minRegistrationSize: Int = conf.getSizeAsBytes(MIN_REGISTRATION_SIZE.key,
     MIN_REGISTRATION_SIZE.defaultValueString).toInt
 
-  lazy val protocol: String = conf.get(PROTOCOL.key, PROTOCOL.defaultValueString)
+  private lazy val USE_ODP =
+    ConfigBuilder(getUcxConf("useOdp"))
+      .doc("Whether to use on demand paging feature, to avoid memory pinning")
+      .booleanConf
+      .createWithDefault(false)
 
-  lazy val useOdp: Boolean = conf.getBoolean(getUcxConf("memory.useOdp"), defaultValue = false)
+  lazy val protocol: PROTOCOL.Value = PROTOCOL.withName(
+    conf.get(PROTOCOL_CONF.key, PROTOCOL_CONF.defaultValueString))
+
+  lazy val useOdp: Boolean = conf.getBoolean(USE_ODP.key, USE_ODP.defaultValue.get)
 
   lazy val pinMemory: Boolean = conf.getBoolean(MEMORY_PINNING.key, MEMORY_PINNING.defaultValue.get)
 
   lazy val maxWorkerAddressSize: Long = conf.getSizeAsBytes(WORKER_ADDRESS_SIZE.key,
     WORKER_ADDRESS_SIZE.defaultValueString)
 
-  lazy val rpcMessageSize: Long = conf.getSizeAsBytes(RPC_MESSAGE_SIZE.key,
-    RPC_MESSAGE_SIZE.defaultValueString)
+  lazy val maxMetadataSize: Long = conf.getSizeAsBytes("spark.rapids.shuffle.maxMetadataSize",
+    "1024")
+
 
   lazy val useWakeup: Boolean = conf.getBoolean(WAKEUP_FEATURE.key, WAKEUP_FEATURE.defaultValue.get)
 
-  lazy val recvQueueSize: Int = conf.getInt(RECV_QUEUE_SIZE.key, RECV_QUEUE_SIZE.defaultValue.get)
+  lazy val useSockAddr: Boolean = conf.getBoolean(USE_SOCKADDR.key, USE_SOCKADDR.defaultValue.get)
 
   lazy val preallocateBuffersMap: Map[Long, Int] = {
-    conf.get(PREALLOCATE_BUFFERS).split(",").withFilter(s => !s.isEmpty)
+    conf.get(PREALLOCATE_BUFFERS.key, "").split(",").withFilter(s => s.nonEmpty)
       .map(entry => entry.split(":") match {
         case Array(bufferSize, bufferCount) =>
           (Utils.byteStringAsBytes(bufferSize.trim), bufferCount.toInt)

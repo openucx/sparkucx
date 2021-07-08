@@ -1,5 +1,5 @@
 /*
-* Copyright (C) Mellanox Technologies Ltd. 2019. ALL RIGHTS RESERVED.
+* Copyright (C) Mellanox Technologies Ltd. 2020. ALL RIGHTS RESERVED.
 * See file LICENSE for terms.
 */
 package org.apache.spark.shuffle.ucx
@@ -76,20 +76,16 @@ class UcxShuffleTransportTestSuite extends AnyFunSuite {
     val resultMemory2 = MemoryBlock(UcxUtils.getAddress(resultBuffer2), blockSize)
 
     val completed = new AtomicInteger(0)
+    val callback: OperationCallback = (result: OperationResult) => {
+      completed.incrementAndGet()
+      assert(result.getStats.get.recvSize == blockSize)
+      assert(result.getStatus == OperationStatus.SUCCESS)
+    }
 
-    transport.fetchBlockByBlockId(server.ID, TestBlockId(1), resultMemory1,
-      (result: OperationResult) => {
-        completed.incrementAndGet()
-        assert(result.getStats.get.recvSize == blockSize)
-        assert(result.getStatus == OperationStatus.SUCCESS)
-    })
-
-    transport.fetchBlockByBlockId(server.ID, TestBlockId(2), resultMemory2,
-      (result: OperationResult) => {
-        completed.incrementAndGet()
-        assert(result.getStats.get.recvSize == blockSize)
-        assert(result.getStatus == OperationStatus.SUCCESS)
-      })
+    transport.fetchBlocksByBlockIds(server.ID,
+      Array(TestBlockId(1), TestBlockId(2)),
+      Array(resultMemory1, resultMemory2),
+      Array(callback, callback))
 
     while (completed.get() != 2) {
       transport.progress()
@@ -107,7 +103,9 @@ class UcxShuffleTransportTestSuite extends AnyFunSuite {
 
     while (!mutated.get()) {}
 
-    val request = transport.fetchBlockByBlockId(server.ID, TestBlockId(2), resultMemory2, null)
+    val request = transport.fetchBlocksByBlockIds(server.ID,
+      Array(TestBlockId(2)), Array(resultMemory2), Seq.empty)(0)
+
     while (!request.isCompleted) {
       transport.progress()
     }
