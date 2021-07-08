@@ -20,6 +20,8 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -50,6 +52,7 @@ public class UcxNode implements Closeable {
   // Mapping from UcpEndpoint to ByteBuffer of RPC message, to introduce executor to cluster
   private static final ConcurrentHashMap<UcpEndpoint, ByteBuffer> rpcConnections =
     new ConcurrentHashMap<>();
+  private List<UcpEndpoint> backwardEndpoints = new ArrayList<>();
 
   // Executor
   private UcpEndpoint globalDriverEndpoint;
@@ -98,7 +101,10 @@ public class UcxNode implements Closeable {
   private void startDriver(InetSocketAddress driverAddress) {
     // 1. Start listener on a driver and accept RPC messages from executors with their
     // worker addresses
-    UcpListenerParams listenerParams = new UcpListenerParams().setSockAddr(driverAddress);
+    UcpListenerParams listenerParams = new UcpListenerParams().setSockAddr(driverAddress)
+      .setConnectionHandler(ucpConnectionRequest ->
+        backwardEndpoints.add(globalWorker.newEndpoint(new UcpEndpointParams()
+        .setConnectionRequest(ucpConnectionRequest))));
     listener = globalWorker.newListener(listenerParams);
     logger.info("Started UcxNode on {}", driverAddress);
   }
@@ -180,6 +186,8 @@ public class UcxNode implements Closeable {
     listener = null;
     rpcConnections.keySet().forEach(UcpEndpoint::close);
     rpcConnections.clear();
+    backwardEndpoints.forEach(UcpEndpoint::close);
+    backwardEndpoints.clear();
   }
 
   private void stopExecutor() {

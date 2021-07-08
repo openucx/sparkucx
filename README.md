@@ -5,9 +5,9 @@ that are supported by [UCX](https://github.com/openucx/ucx#supported-transports)
 This open-source project is developed, maintained and supported by the [UCF consortium](http://www.ucfconsortium.org/).
 
 ## Runtime requirements
-* Apache Spark 2.3/2.4
+* Apache Spark 2.3/2.4/3.0
 * Java 8+
-* Installed UCX of version 1.7+, and [UCX supported transport hardware](https://github.com/openucx/ucx#supported-transports).
+* Installed UCX of version 1.10+, and [UCX supported transport hardware](https://github.com/openucx/ucx#supported-transports).
 
 ## Installation
 
@@ -18,16 +18,7 @@ Put SparkUCX jar file in $SPARK_UCX_HOME on all the nodes in your cluster.
 <br>If you would like to build the project yourself, please refer to the ["Build"](https://github.com/openucx/sparkucx#build) section below.
 
 Ucx binaries **must** be in Spark classpath on every Spark Master and Worker.
-It can be obtained by installing latest version of [Mellanox OFED](http://www.mellanox.com/page/products_dyn?product_family=26)
-or following [ucx build instruction](https://github.com/openucx/ucx#using-ucx). E.g.:
-
-```
-% export UCX_PREFIX=/usr/local
-% git clone https://github.com/openucx/ucx.git
-% cd ucx
-% ./contrib/configure-release --with-java –-prefix=$UCX_PREFIX
-% make -j`nproc` && make install
-```
+It can be obtained by installing the latest version from [Ucx release page](https://github.com/openucx/ucx/releases)
 
 ### Configuration
 
