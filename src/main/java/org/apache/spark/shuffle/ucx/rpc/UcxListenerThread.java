@@ -8,6 +8,8 @@ import org.apache.spark.shuffle.ucx.UcxNode;
 import org.apache.spark.unsafe.Platform;
 import org.openucx.jucx.ucp.UcpRequest;
 import org.openucx.jucx.ucp.UcpWorker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 
@@ -15,8 +17,9 @@ import java.nio.ByteBuffer;
  * Thread for progressing global worker for connection establishment and RPC exchange.
  */
 public class UcxListenerThread extends Thread implements Runnable {
-  private UcxNode ucxNode;
-  private boolean isDriver;
+  private static final Logger logger = LoggerFactory.getLogger(UcxListenerThread.class);
+  private final UcxNode ucxNode;
+  private final boolean isDriver;
   private final UcpWorker globalWorker;
 
   public UcxListenerThread(UcxNode ucxNode, boolean isDriver) {
@@ -46,11 +49,15 @@ public class UcxListenerThread extends Thread implements Runnable {
         // Process 1 recv request at a time.
         recv = recvRequest();
       }
-      if (globalWorker.progress() == 0) {
-        globalWorker.waitForEvents();
+      try {
+        if (globalWorker.progress() == 0) {
+          globalWorker.waitForEvents();
+        }
+      } catch (Exception e) {
+        logger.error(e.getLocalizedMessage());
+        interrupt();
       }
     }
     globalWorker.cancelRequest(recv);
-    recv.close();
   }
 }
