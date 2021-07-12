@@ -5,8 +5,8 @@ See file LICENSE for terms.
  -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                       http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.openucx</groupId>
@@ -35,11 +35,67 @@ See file LICENSE for terms.
 
   <profiles>
     <profile>
+      <id>spark-2.1</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_3_0/**</exclude>
+                <exclude>**/spark_2_4/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_3_0/**</exclude>
+                <exclude>**/spark_2_4/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+      <properties>
+        <spark.version>2.1.0</spark.version>
+        <sonar.exclusions>**/spark_3_0/**, **/spark_2_4/**</sonar.exclusions>
+        <scala.version>2.11.12</scala.version>
+        <scala.compat.version>2.11</scala.compat.version>
+      </properties>
+    </profile>
+    <profile>
       <id>spark-2.4</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_3_0/**</exclude>
+                <exclude>**/spark_2_1/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_2_1/**</exclude>
+                <exclude>**/spark_3_0/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
       <properties>
         <spark.version>2.4.0</spark.version>
-        <project.excludes>**/spark_3_0/**</project.excludes>
-        <sonar.exclusions>**/spark_3_0/**</sonar.exclusions>
+        <sonar.exclusions>**/spark_3_0/**, **/spark_2_1/**</sonar.exclusions>
         <scala.version>2.11.12</scala.version>
         <scala.compat.version>2.11</scala.compat.version>
       </properties>
@@ -49,12 +105,35 @@ See file LICENSE for terms.
       <activation>
         <activeByDefault>true</activeByDefault>
       </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_2_1/**</exclude>
+                <exclude>**/spark_2_4/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_2_1/**</exclude>
+                <exclude>**/spark_2_4/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
       <properties>
         <spark.version>3.0.1</spark.version>
         <scala.version>2.12.10</scala.version>
         <scala.compat.version>2.12</scala.compat.version>
-        <project.excludes>**/spark_2_4/**</project.excludes>
-        <sonar.exclusions>**/spark_2_4/**</sonar.exclusions>
+        <sonar.exclusions>**/spark_2_1/**, **/spark_2_4/**</sonar.exclusions>
       </properties>
     </profile>
   </profiles>
@@ -84,9 +163,6 @@ See file LICENSE for terms.
         <configuration>
           <source>1.8</source>
           <target>1.8</target>
-          <excludes>
-            <exclude>${project.excludes}</exclude>
-          </excludes>
         </configuration>
       </plugin>
       <plugin>
@@ -95,9 +171,6 @@ See file LICENSE for terms.
         <version>4.3.0</version>
         <configuration>
           <recompileMode>all</recompileMode>
-          <excludes>
-            <exclude>${project.excludes}</exclude>
-          </excludes>
           <args>
             <arg>-nobootcp</arg>
             <arg>-Xexperimental</arg>
@@ -111,9 +184,9 @@ See file LICENSE for terms.
         <executions>
           <execution>
             <id>compile</id>
-              <goals>
-                <goal>compile</goal>
-              </goals>
+            <goals>
+              <goal>compile</goal>
+            </goals>
             <phase>compile</phase>
           </execution>
           <execution>
