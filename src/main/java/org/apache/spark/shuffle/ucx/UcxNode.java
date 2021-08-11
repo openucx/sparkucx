@@ -182,8 +182,10 @@ public class UcxNode implements Closeable {
   }
 
   private void stopDriver() {
-    listener.close();
-    listener = null;
+    if (listener != null) {
+      listener.close();
+      listener = null;
+    }
     rpcConnections.keySet().forEach(UcpEndpoint::close);
     rpcConnections.clear();
     backwardEndpoints.forEach(UcpEndpoint::close);
@@ -209,21 +211,21 @@ public class UcxNode implements Closeable {
         globalWorker.signal();
         try {
           listenerProgressThread.join();
+          if (isDriver) {
+            stopDriver();
+          } else {
+            stopExecutor();
+          }
+          memoryPool.close();
+          globalWorker.close();
+          context.close();
+          closed = true;
         } catch (InterruptedException e) {
           logger.error(e.getMessage());
           Thread.currentThread().interrupt();
+        } catch (Exception ex) {
+          logger.warn(ex.getLocalizedMessage());
         }
-
-        if (isDriver) {
-          stopDriver();
-        } else {
-          stopExecutor();
-        }
-
-        memoryPool.close();
-        globalWorker.close();
-        context.close();
-        closed = true;
       }
     }
   }
