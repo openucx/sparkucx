@@ -43,6 +43,7 @@ See file LICENSE for terms.
             <artifactId>maven-compiler-plugin</artifactId>
             <configuration>
               <excludes>
+                <exclude>**/spark_3_1/**</exclude>
                 <exclude>**/spark_3_0/**</exclude>
                 <exclude>**/spark_2_4/**</exclude>
               </excludes>
@@ -53,6 +54,7 @@ See file LICENSE for terms.
             <artifactId>scala-maven-plugin</artifactId>
             <configuration>
               <excludes>
+                <exclude>**/spark_3_1/**</exclude>
                 <exclude>**/spark_3_0/**</exclude>
                 <exclude>**/spark_2_4/**</exclude>
               </excludes>
@@ -62,7 +64,7 @@ See file LICENSE for terms.
       </build>
       <properties>
         <spark.version>2.1.0</spark.version>
-        <sonar.exclusions>**/spark_3_0/**, **/spark_2_4/**</sonar.exclusions>
+        <sonar.exclusions>**/spark_3_1/**, **/spark_3_0/**, **/spark_2_4/**</sonar.exclusions>
         <scala.version>2.11.12</scala.version>
         <scala.compat.version>2.11</scala.compat.version>
       </properties>
@@ -76,6 +78,7 @@ See file LICENSE for terms.
             <artifactId>maven-compiler-plugin</artifactId>
             <configuration>
               <excludes>
+                <exclude>**/spark_3_1/**</exclude>
                 <exclude>**/spark_3_0/**</exclude>
                 <exclude>**/spark_2_1/**</exclude>
               </excludes>
@@ -86,6 +89,7 @@ See file LICENSE for terms.
             <artifactId>scala-maven-plugin</artifactId>
             <configuration>
               <excludes>
+                <exclude>**/spark_3_1/**</exclude>
                 <exclude>**/spark_2_1/**</exclude>
                 <exclude>**/spark_3_0/**</exclude>
               </excludes>
@@ -95,16 +99,13 @@ See file LICENSE for terms.
       </build>
       <properties>
         <spark.version>2.4.0</spark.version>
-        <sonar.exclusions>**/spark_3_0/**, **/spark_2_1/**</sonar.exclusions>
+        <sonar.exclusions>**/spark_3_1/**, **/spark_3_0/**, **/spark_2_1/**</sonar.exclusions>
         <scala.version>2.11.12</scala.version>
         <scala.compat.version>2.11</scala.compat.version>
       </properties>
     </profile>
     <profile>
       <id>spark-3.0</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <build>
         <plugins>
           <plugin>
@@ -112,6 +113,7 @@ See file LICENSE for terms.
             <artifactId>maven-compiler-plugin</artifactId>
             <configuration>
               <excludes>
+                <exclude>**/spark_3_1/**</exclude>
                 <exclude>**/spark_2_1/**</exclude>
                 <exclude>**/spark_2_4/**</exclude>
               </excludes>
@@ -122,6 +124,7 @@ See file LICENSE for terms.
             <artifactId>scala-maven-plugin</artifactId>
             <configuration>
               <excludes>
+                <exclude>**/spark_3_1/**</exclude>
                 <exclude>**/spark_2_1/**</exclude>
                 <exclude>**/spark_2_4/**</exclude>
               </excludes>
@@ -133,7 +136,45 @@ See file LICENSE for terms.
         <spark.version>3.0.1</spark.version>
         <scala.version>2.12.10</scala.version>
         <scala.compat.version>2.12</scala.compat.version>
-        <sonar.exclusions>**/spark_2_1/**, **/spark_2_4/**</sonar.exclusions>
+        <sonar.exclusions>**/spark_3_1/**, **/spark_2_1/**, **/spark_2_4/**</sonar.exclusions>
+      </properties>
+    </profile>
+    <profile>
+      <id>spark-3.1</id>
+      <activation>
+        <activeByDefault>true</activeByDefault>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_3_0/**</exclude>
+                <exclude>**/spark_2_1/**</exclude>
+                <exclude>**/spark_2_4/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+          <plugin>
+            <groupId>net.alchim31.maven</groupId>
+            <artifactId>scala-maven-plugin</artifactId>
+            <configuration>
+              <excludes>
+                <exclude>**/spark_3_0/**</exclude>
+                <exclude>**/spark_2_1/**</exclude>
+                <exclude>**/spark_2_4/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+      <properties>
+        <spark.version>3.1.2</spark.version>
+        <scala.version>2.12.10</scala.version>
+        <scala.compat.version>2.12</scala.compat.version>
+        <sonar.exclusions>**/spark_3_0/**, **/spark_2_1/**, **/spark_2_4/**</sonar.exclusions>
       </properties>
     </profile>
   </profiles>

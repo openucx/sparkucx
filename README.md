@@ -5,7 +5,7 @@ that are supported by [UCX](https://github.com/openucx/ucx#supported-transports)
 This open-source project is developed, maintained and supported by the [UCF consortium](http://www.ucfconsortium.org/).
 
 ## Runtime requirements
-* Apache Spark 2.3/2.4/3.0
+* Apache Spark 2.3/2.4/3.0/3.1
 * Java 8+
 * Installed UCX of version 1.10+, and [UCX supported transport hardware](https://github.com/openucx/ucx#supported-transports).
 
@@ -34,9 +34,9 @@ to spark (e.g. in $SPARK_HOME/conf/spark-defaults.conf):
 ```
 spark.shuffle.manager   org.apache.spark.shuffle.UcxShuffleManager
 ```
-For spark-3.0 version add SparkUCX ShuffleIO plugin:
+For spark-3.0 or spark-3.1 versions add SparkUCX ShuffleIO plugin:
 ```
-spark.shuffle.sort.io.plugin.class org.apache.spark.shuffle.compat.spark_3_0.UcxLocalDiskShuffleDataIO
+spark.shuffle.sort.io.plugin.class org.apache.spark.shuffle.compat.spark_(3_0|3_1).UcxLocalDiskShuffleDataIO
 ```
 
 ### Build
