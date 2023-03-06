@@ -24,7 +24,7 @@ class UcxShuffleManager(override val conf: SparkConf, isDriver: Boolean) extends
 
   override def registerShuffle[K, V, C](shuffleId: ShuffleId, dependency: ShuffleDependency[K, V, C]): ShuffleHandle = {
     assume(isDriver)
-    val numMaps = dependency.partitioner.numPartitions
+    val numMaps = dependency.rdd.getNumPartitions
     val baseHandle = super.registerShuffle(shuffleId, dependency).asInstanceOf[BaseShuffleHandle[K, V, C]]
     registerShuffleCommon(baseHandle, shuffleId, numMaps)
   }
