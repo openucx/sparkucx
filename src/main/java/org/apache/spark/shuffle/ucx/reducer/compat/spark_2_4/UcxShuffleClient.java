@@ -95,8 +95,7 @@ public class UcxShuffleClient extends ShuffleClient {
     submitFetchOffsets(endpoint, shuffleBlockIds, dataAddresses, offsetMemory);
 
     // flush guarantees that all that requests completes when callback is called.
-    // TODO: fix https://github.com/openucx/ucx/issues/4267 and use endpoint flush.
-    workerWrapper.worker().flushNonBlocking(
+    endpoint.flushNonBlocking(
       new OnOffsetsFetchCallback(shuffleBlockIds, endpoint, listener, offsetMemory,
         dataAddresses, dataRkeysCache));
     shuffleReadMetrics.incFetchWaitTime(System.currentTimeMillis() - startTime);

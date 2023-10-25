@@ -118,8 +118,7 @@ public class UcxShuffleClient extends BlockStoreClient {
     submitFetchOffsets(endpoint, blocks, offsetMemory, dataAddresses);
 
     // flush guarantees that all that requests completes when callback is called.
-    // TODO: fix https://github.com/openucx/ucx/issues/4267 and use endpoint flush.
-    workerWrapper.worker().flushNonBlocking(
+    endpoint.flushNonBlocking(
       new OnOffsetsFetchCallback(blocks, endpoint, listener, offsetMemory,
         dataAddresses, dataRkeysCache, mapId2PartitionId));
 
