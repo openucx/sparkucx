@@ -28,72 +28,72 @@ import java.util.concurrent.ConcurrentMap;
  * introduce cluster to connected executor.
  */
 public class RpcConnectionCallback extends UcxCallback {
-  private static final Logger logger = LoggerFactory.getLogger(RpcConnectionCallback.class);
-  private final ByteBuffer metadataBuffer;
-  private final boolean isDriver;
-  private final UcxNode ucxNode;
-  private static final ConcurrentMap<UcpEndpoint, ByteBuffer> rpcConnections =
-    UcxNode.getRpcConnections();
-  private static final ConcurrentMap<BlockManagerId, ByteBuffer> workerAdresses =
-    UcxNode.getWorkerAddresses();
+    private static final Logger logger = LoggerFactory.getLogger(RpcConnectionCallback.class);
+    private final ByteBuffer metadataBuffer;
+    private final boolean isDriver;
+    private final UcxNode ucxNode;
+    private static final ConcurrentMap<UcpEndpoint, ByteBuffer> rpcConnections =
+            UcxNode.getRpcConnections();
+    private static final ConcurrentMap<BlockManagerId, ByteBuffer> workerAdresses =
+            UcxNode.getWorkerAddresses();
 
-  RpcConnectionCallback(ByteBuffer metadataBuffer, boolean isDriver, UcxNode ucxNode) {
-    this.metadataBuffer = metadataBuffer;
-    this.isDriver = isDriver;
-    this.ucxNode = ucxNode;
-  }
-
-  @Override
-  public void onSuccess(UcpRequest request) {
-    int workerAddressSize = metadataBuffer.getInt();
-    ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
-
-    // Copy worker address from metadata buffer to separate buffer.
-    final ByteBuffer metadataView = metadataBuffer.duplicate();
-    metadataView.limit(metadataView.position() + workerAddressSize);
-    workerAddress.put(metadataView);
-    metadataBuffer.position(metadataBuffer.position() + workerAddressSize);
-
-    BlockManagerId blockManagerId;
-    try {
-      blockManagerId = SerializableBlockManagerID
-        .deserializeBlockManagerID(metadataBuffer);
-    } catch (IOException e) {
-      String errorMsg = String.format("Failed to deserialize BlockManagerId: %s", e.getMessage());
-      throw new UcxException(errorMsg);
+    RpcConnectionCallback(ByteBuffer metadataBuffer, boolean isDriver, UcxNode ucxNode) {
+        this.metadataBuffer = metadataBuffer;
+        this.isDriver = isDriver;
+        this.ucxNode = ucxNode;
     }
-    logger.debug("Received RPC message from {}", blockManagerId);
-    UcpWorker globalWorker = ucxNode.getGlobalWorker();
 
-    workerAddress.clear();
+    @Override
+    public void onSuccess(UcpRequest request) {
+        int workerAddressSize = metadataBuffer.getInt();
+        ByteBuffer workerAddress = Platform.allocateDirectBuffer(workerAddressSize);
 
-    if (isDriver) {
-      metadataBuffer.clear();
-      UcpEndpoint newConnection = globalWorker.newEndpoint(
-        new UcpEndpointParams().setPeerErrorHandlingMode()
-          .setUcpAddress(workerAddress));
-      // For each existing connection
-      rpcConnections.forEach((connection, connectionMetadata) -> {
-        // send address of joined worker to already connected workers
-        connection.sendTaggedNonBlocking(metadataBuffer, null);
-        // introduce other workers to joined worker
-        newConnection.sendTaggedNonBlocking(connectionMetadata, null);
-      });
+        // Copy worker address from metadata buffer to separate buffer.
+        final ByteBuffer metadataView = metadataBuffer.duplicate();
+        metadataView.limit(metadataView.position() + workerAddressSize);
+        workerAddress.put(metadataView);
+        metadataBuffer.position(metadataBuffer.position() + workerAddressSize);
 
-      rpcConnections.put(newConnection, metadataBuffer);
+        BlockManagerId blockManagerId;
+        try {
+            blockManagerId = SerializableBlockManagerID
+                    .deserializeBlockManagerID(metadataBuffer);
+        } catch (IOException e) {
+            String errorMsg = String.format("Failed to deserialize BlockManagerId: %s", e.getMessage());
+            throw new UcxException(errorMsg);
+        }
+        logger.debug("Received RPC message from {}", blockManagerId);
+        UcpWorker globalWorker = ucxNode.getGlobalWorker();
+
+        workerAddress.clear();
+
+        if (isDriver) {
+            metadataBuffer.clear();
+            UcpEndpoint newConnection = globalWorker.newEndpoint(
+                    new UcpEndpointParams().setPeerErrorHandlingMode()
+                            .setUcpAddress(workerAddress));
+            // For each existing connection
+            rpcConnections.forEach((connection, connectionMetadata) -> {
+                // send address of joined worker to already connected workers
+                connection.sendTaggedNonBlocking(metadataBuffer, null);
+                // introduce other workers to joined worker
+                newConnection.sendTaggedNonBlocking(connectionMetadata, null);
+            });
+
+            rpcConnections.put(newConnection, metadataBuffer);
+        }
+        workerAdresses.put(blockManagerId, workerAddress);
+        synchronized (workerAdresses) {
+            workerAdresses.notifyAll();
+        }
     }
-    workerAdresses.put(blockManagerId, workerAddress);
-    synchronized (workerAdresses) {
-      workerAdresses.notifyAll();
-    }
-  }
 
-  @Override
-  public void onError(int ucsStatus, String errorMsg) {
-    // UCS_ERR_CANCELED = -16,
-    if (ucsStatus != -16) {
-      logger.error("Request error: {}", errorMsg);
-      throw new UcxException(errorMsg);
+    @Override
+    public void onError(int ucsStatus, String errorMsg) {
+        // UCS_ERR_CANCELED = -16,
+        if (ucsStatus != -16) {
+            logger.error("Request error: {}", errorMsg);
+            throw new UcxException(errorMsg);
+        }
     }
-  }
 }

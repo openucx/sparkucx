@@ -12,32 +12,32 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Keeps track on reference count to memory region.
  */
 public class RegisteredMemory {
-  private static final Logger logger = LoggerFactory.getLogger(RegisteredMemory.class);
+    private static final Logger logger = LoggerFactory.getLogger(RegisteredMemory.class);
 
-  private final AtomicInteger refcount;
-  private final UcpMemory memory;
-  private final ByteBuffer buffer;
+    private final AtomicInteger refcount;
+    private final UcpMemory memory;
+    private final ByteBuffer buffer;
 
-  RegisteredMemory(AtomicInteger refcount, UcpMemory memory, ByteBuffer buffer) {
-    this.refcount = refcount;
-    this.memory = memory;
-    this.buffer = buffer;
-  }
-
-  public ByteBuffer getBuffer() {
-    return buffer;
-  }
-
-  AtomicInteger getRefCount() {
-    return refcount;
-  }
-
-  void deregisterNativeMemory() {
-    if (refcount.get() != 0) {
-      logger.warn("De-registering memory of size {} that has active references.", buffer.capacity());
+    RegisteredMemory(AtomicInteger refcount, UcpMemory memory, ByteBuffer buffer) {
+        this.refcount = refcount;
+        this.memory = memory;
+        this.buffer = buffer;
     }
-    if (memory != null && memory.getNativeId() != null) {
-      memory.deregister();
+
+    public ByteBuffer getBuffer() {
+        return buffer;
     }
-  }
+
+    AtomicInteger getRefCount() {
+        return refcount;
+    }
+
+    void deregisterNativeMemory() {
+        if (refcount.get() != 0) {
+            logger.warn("De-registering memory of size {} that has active references.", buffer.capacity());
+        }
+        if (memory != null && memory.getNativeId() != null) {
+            memory.deregister();
+        }
+    }
 }

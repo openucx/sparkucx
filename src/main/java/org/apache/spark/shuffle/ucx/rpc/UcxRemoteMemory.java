@@ -16,39 +16,40 @@ import java.nio.ByteBuffer;
  * spark's mechanism to broadcast tasks.
  */
 public class UcxRemoteMemory implements Serializable {
-  private long address;
-  private ByteBuffer rkeyBuffer;
+    private long address;
+    private ByteBuffer rkeyBuffer;
 
-  public UcxRemoteMemory(long address, ByteBuffer rkeyBuffer) {
-    this.address = address;
-    this.rkeyBuffer = rkeyBuffer;
-  }
+    public UcxRemoteMemory(long address, ByteBuffer rkeyBuffer) {
+        this.address = address;
+        this.rkeyBuffer = rkeyBuffer;
+    }
 
-  public UcxRemoteMemory() {}
+    public UcxRemoteMemory() {
+    }
 
-  private void writeObject(ObjectOutputStream out) throws IOException {
-    out.writeLong(address);
-    out.writeInt(rkeyBuffer.limit());
-    byte[] copy = new byte[rkeyBuffer.limit()];
-    rkeyBuffer.clear();
-    rkeyBuffer.get(copy);
-    out.write(copy);
-  }
+    private void writeObject(ObjectOutputStream out) throws IOException {
+        out.writeLong(address);
+        out.writeInt(rkeyBuffer.limit());
+        byte[] copy = new byte[rkeyBuffer.limit()];
+        rkeyBuffer.clear();
+        rkeyBuffer.get(copy);
+        out.write(copy);
+    }
 
-  private void readObject(ObjectInputStream in) throws IOException {
-    this.address = in.readLong();
-    int bufferSize = in.readInt();
-    byte[] buffer = new byte[bufferSize];
-    in.read(buffer, 0, bufferSize);
-    this.rkeyBuffer = ByteBuffer.allocateDirect(bufferSize).put(buffer);
-    this.rkeyBuffer.clear();
-  }
+    private void readObject(ObjectInputStream in) throws IOException {
+        this.address = in.readLong();
+        int bufferSize = in.readInt();
+        byte[] buffer = new byte[bufferSize];
+        in.read(buffer, 0, bufferSize);
+        this.rkeyBuffer = ByteBuffer.allocateDirect(bufferSize).put(buffer);
+        this.rkeyBuffer.clear();
+    }
 
-  public long getAddress() {
-    return address;
-  }
+    public long getAddress() {
+        return address;
+    }
 
-  public ByteBuffer getRkeyBuffer() {
-    return rkeyBuffer;
-  }
+    public ByteBuffer getRkeyBuffer() {
+        return rkeyBuffer;
+    }
 }

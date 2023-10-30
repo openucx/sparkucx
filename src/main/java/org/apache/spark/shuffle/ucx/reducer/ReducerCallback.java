@@ -18,25 +18,25 @@ import org.slf4j.LoggerFactory;
  * Common data needed for offset fetch callback and subsequent block fetch callback.
  */
 public abstract class ReducerCallback extends UcxCallback {
-  protected MemoryPool mempool;
-  protected BlockId[] blockIds;
-  protected UcpEndpoint endpoint;
-  protected BlockFetchingListener listener;
-  protected static final Logger logger = LoggerFactory.getLogger(ReducerCallback.class);
-  protected long startTime = System.currentTimeMillis();
+    protected MemoryPool mempool;
+    protected BlockId[] blockIds;
+    protected UcpEndpoint endpoint;
+    protected BlockFetchingListener listener;
+    protected static final Logger logger = LoggerFactory.getLogger(ReducerCallback.class);
+    protected long startTime = System.currentTimeMillis();
 
-  public ReducerCallback(BlockId[] blockIds, UcpEndpoint endpoint, BlockFetchingListener listener) {
-    this.mempool = ((CommonUcxShuffleManager)SparkEnv.get().shuffleManager()).ucxNode().getMemoryPool();
-    this.blockIds = blockIds;
-    this.endpoint = endpoint;
-    this.listener = listener;
-  }
+    public ReducerCallback(BlockId[] blockIds, UcpEndpoint endpoint, BlockFetchingListener listener) {
+        this.mempool = ((CommonUcxShuffleManager) SparkEnv.get().shuffleManager()).ucxNode().getMemoryPool();
+        this.blockIds = blockIds;
+        this.endpoint = endpoint;
+        this.listener = listener;
+    }
 
-  public ReducerCallback(ReducerCallback callback) {
-    this.blockIds = callback.blockIds;
-    this.endpoint = callback.endpoint;
-    this.listener = callback.listener;
-    this.mempool = callback.mempool;
-    this.startTime = callback.startTime;
-  }
+    public ReducerCallback(ReducerCallback callback) {
+        this.blockIds = callback.blockIds;
+        this.endpoint = callback.endpoint;
+        this.listener = callback.listener;
+        this.mempool = callback.mempool;
+        this.startTime = callback.startTime;
+    }
 }
