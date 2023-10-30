@@ -14,19 +14,19 @@ import java.nio.ByteBuffer;
  */
 public class SerializableBlockManagerID {
 
-  public static void serializeBlockManagerID(BlockManagerId blockManagerId,
-                                             ByteBuffer metadataBuffer) throws IOException {
-    ObjectOutputStream oos = new ObjectOutputStream(
-      new ByteBufferOutputStream(metadataBuffer));
-    blockManagerId.writeExternal(oos);
-    oos.close();
-  }
+    public static void serializeBlockManagerID(BlockManagerId blockManagerId,
+                                               ByteBuffer metadataBuffer) throws IOException {
+        ObjectOutputStream oos = new ObjectOutputStream(
+                new ByteBufferOutputStream(metadataBuffer));
+        blockManagerId.writeExternal(oos);
+        oos.close();
+    }
 
-  static BlockManagerId deserializeBlockManagerID(ByteBuffer metadataBuffer) throws IOException {
-    ObjectInputStream ois =
-      new ObjectInputStream(new ByteBufferInputStream(metadataBuffer));
-    BlockManagerId blockManagerId = BlockManagerId.apply(ois);
-    ois.close();
-    return blockManagerId;
-  }
+    static BlockManagerId deserializeBlockManagerID(ByteBuffer metadataBuffer) throws IOException {
+        ObjectInputStream ois =
+                new ObjectInputStream(new ByteBufferInputStream(metadataBuffer));
+        BlockManagerId blockManagerId = BlockManagerId.apply(ois);
+        ois.close();
+        return blockManagerId;
+    }
 }

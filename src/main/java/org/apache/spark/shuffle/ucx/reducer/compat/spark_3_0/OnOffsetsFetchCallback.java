@@ -25,69 +25,69 @@ import java.util.Map;
  * Callback, called when got all offsets for blocks
  */
 public class OnOffsetsFetchCallback extends ReducerCallback {
-  private final RegisteredMemory offsetMemory;
-  private final long[] dataAddresses;
-  private Map<Integer, UcpRemoteKey> dataRkeysCache;
-  private final Map<Long, Integer> mapId2PartitionId;
+    private final RegisteredMemory offsetMemory;
+    private final long[] dataAddresses;
+    private Map<Integer, UcpRemoteKey> dataRkeysCache;
+    private final Map<Long, Integer> mapId2PartitionId;
 
-  public OnOffsetsFetchCallback(BlockId[] blockIds, UcpEndpoint endpoint, BlockFetchingListener listener,
-                                RegisteredMemory offsetMemory, long[] dataAddresses,
-                                Map<Integer, UcpRemoteKey> dataRkeysCache,
-                                Map<Long, Integer> mapId2PartitionId) {
-    super(blockIds, endpoint, listener);
-    this.offsetMemory = offsetMemory;
-    this.dataAddresses = dataAddresses;
-    this.dataRkeysCache = dataRkeysCache;
-    this.mapId2PartitionId = mapId2PartitionId;
-  }
-
-  @Override
-  public void onSuccess(UcpRequest request) {
-    ByteBuffer resultOffset = offsetMemory.getBuffer();
-    long totalSize = 0;
-    int[] sizes = new int[blockIds.length];
-    int offset = 0;
-    long blockOffset;
-    long blockLength;
-    int offsetSize = UnsafeUtils.LONG_SIZE;
-    for (int i = 0; i < blockIds.length; i++) {
-      // Blocks in metadata buffer are in form | blockOffsetStart | blockOffsetEnd |
-      if (blockIds[i] instanceof ShuffleBlockBatchId) {
-        ShuffleBlockBatchId blockBatchId = (ShuffleBlockBatchId) blockIds[i];
-        int blocksInBatch = blockBatchId.endReduceId() - blockBatchId.startReduceId();
-        blockOffset = resultOffset.getLong(offset * 2 * offsetSize);
-        blockLength = resultOffset.getLong(offset * 2 * offsetSize + offsetSize * blocksInBatch)
-          - blockOffset;
-        offset += blocksInBatch;
-      } else {
-        blockOffset = resultOffset.getLong(offset * 16);
-        blockLength = resultOffset.getLong(offset * 16 + 8) - blockOffset;
-        offset++;
-      }
-
-      assert (blockLength > 0) && (blockLength <= Integer.MAX_VALUE);
-      sizes[i] = (int) blockLength;
-      totalSize += blockLength;
-      dataAddresses[i] += blockOffset;
+    public OnOffsetsFetchCallback(BlockId[] blockIds, UcpEndpoint endpoint, BlockFetchingListener listener,
+                                  RegisteredMemory offsetMemory, long[] dataAddresses,
+                                  Map<Integer, UcpRemoteKey> dataRkeysCache,
+                                  Map<Long, Integer> mapId2PartitionId) {
+        super(blockIds, endpoint, listener);
+        this.offsetMemory = offsetMemory;
+        this.dataAddresses = dataAddresses;
+        this.dataRkeysCache = dataRkeysCache;
+        this.mapId2PartitionId = mapId2PartitionId;
     }
 
-    assert  (totalSize > 0) &&  (totalSize < Integer.MAX_VALUE);
-    mempool.put(offsetMemory);
-    RegisteredMemory blocksMemory = mempool.get((int) totalSize);
+    @Override
+    public void onSuccess(UcpRequest request) {
+        ByteBuffer resultOffset = offsetMemory.getBuffer();
+        long totalSize = 0;
+        int[] sizes = new int[blockIds.length];
+        int offset = 0;
+        long blockOffset;
+        long blockLength;
+        int offsetSize = UnsafeUtils.LONG_SIZE;
+        for (int i = 0; i < blockIds.length; i++) {
+            // Blocks in metadata buffer are in form | blockOffsetStart | blockOffsetEnd |
+            if (blockIds[i] instanceof ShuffleBlockBatchId) {
+                ShuffleBlockBatchId blockBatchId = (ShuffleBlockBatchId) blockIds[i];
+                int blocksInBatch = blockBatchId.endReduceId() - blockBatchId.startReduceId();
+                blockOffset = resultOffset.getLong(offset * 2 * offsetSize);
+                blockLength = resultOffset.getLong(offset * 2 * offsetSize + offsetSize * blocksInBatch)
+                        - blockOffset;
+                offset += blocksInBatch;
+            } else {
+                blockOffset = resultOffset.getLong(offset * 16);
+                blockLength = resultOffset.getLong(offset * 16 + 8) - blockOffset;
+                offset++;
+            }
 
-    offset = 0;
-    // Submits N fetch blocks requests
-    for (int i = 0; i < blockIds.length; i++) {
-      int mapPartitionId = (blockIds[i] instanceof ShuffleBlockId) ?
-        mapId2PartitionId.get(((ShuffleBlockId)blockIds[i]).mapId()) :
-        mapId2PartitionId.get(((ShuffleBlockBatchId)blockIds[i]).mapId());
-      endpoint.getNonBlockingImplicit(dataAddresses[i], dataRkeysCache.get(mapPartitionId),
-        UcxUtils.getAddress(blocksMemory.getBuffer()) + offset, sizes[i]);
-      offset += sizes[i];
+            assert (blockLength > 0) && (blockLength <= Integer.MAX_VALUE);
+            sizes[i] = (int) blockLength;
+            totalSize += blockLength;
+            dataAddresses[i] += blockOffset;
+        }
+
+        assert (totalSize > 0) && (totalSize < Integer.MAX_VALUE);
+        mempool.put(offsetMemory);
+        RegisteredMemory blocksMemory = mempool.get((int) totalSize);
+
+        offset = 0;
+        // Submits N fetch blocks requests
+        for (int i = 0; i < blockIds.length; i++) {
+            int mapPartitionId = (blockIds[i] instanceof ShuffleBlockId) ?
+                    mapId2PartitionId.get(((ShuffleBlockId) blockIds[i]).mapId()) :
+                    mapId2PartitionId.get(((ShuffleBlockBatchId) blockIds[i]).mapId());
+            endpoint.getNonBlockingImplicit(dataAddresses[i], dataRkeysCache.get(mapPartitionId),
+                    UcxUtils.getAddress(blocksMemory.getBuffer()) + offset, sizes[i]);
+            offset += sizes[i];
+        }
+
+        // Process blocks when all fetched.
+        // Flush guarantees that callback would invoke when all fetch requests will completed.
+        endpoint.flushNonBlocking(new OnBlocksFetchCallback(this, blocksMemory, sizes));
     }
-
-    // Process blocks when all fetched.
-    // Flush guarantees that callback would invoke when all fetch requests will completed.
-    endpoint.flushNonBlocking(new OnBlocksFetchCallback(this, blocksMemory, sizes));
-  }
 }

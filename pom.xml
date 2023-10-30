@@ -149,7 +149,7 @@ See file LICENSE for terms.
     <dependency>
       <groupId>org.openucx</groupId>
       <artifactId>jucx</artifactId>
-      <version>1.11.0-rc3</version>
+      <version>1.14.1</version>
     </dependency>
   </dependencies>
 

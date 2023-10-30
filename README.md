@@ -48,7 +48,7 @@ Build instructions:
 ```
 % git clone https://github.com/openucx/sparkucx
 % cd sparkucx
-% mvn -DskipTests clean package -Pspark-2.4
+% mvn -DskipTests clean package -Pspark-3.0
 ```
 
 ### Performance
